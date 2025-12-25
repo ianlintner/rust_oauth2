@@ -4,19 +4,26 @@ This document outlines the required security configurations for deploying the OA
 
 ## Required Environment Variables
 
-### JWT Secret (REQUIRED)
+### JWT Secret (REQUIRED for Production)
 
-The server will **NOT start** without a valid JWT secret configured:
+The server will issue a **WARNING** on startup if JWT secret is not properly configured:
 
 ```bash
 # Generate a secure random secret (minimum 32 characters)
 export OAUTH2_JWT_SECRET=$(openssl rand -hex 32)
 ```
 
+**Important:**
+- The server uses a fail-safe default for testing: `insecure-default-for-testing-only-change-in-production`
+- This default triggers a validation warning on startup
+- **NEVER use the default in production!**
+- The validation requires secrets to be at least 32 characters
+- Set `OAUTH2_JWT_SECRET` environment variable before running the server
+
 **Why this is required:**
 - JWT tokens are signed with this secret
 - Weak or default secrets compromise the entire authentication system
-- The server explicitly requires this to be set via environment variable
+- The server validates the configuration and logs warnings if defaults are detected
 
 ### Session Key (RECOMMENDED for Production)
 

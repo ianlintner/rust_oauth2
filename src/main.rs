@@ -65,6 +65,13 @@ async fn main() -> std::io::Result<()> {
 
     // Load configuration
     let config = config::Config::default();
+    
+    // Validate configuration for production
+    if let Err(e) = config.validate_for_production() {
+        tracing::warn!("Configuration validation warning: {}", e);
+        tracing::warn!("This configuration should only be used for testing!");
+    }
+    
     tracing::info!("Configuration loaded");
 
     // Load social login configuration
