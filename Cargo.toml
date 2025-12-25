@@ -73,6 +73,16 @@ tracing-actix-web = "0.7"
 tera = "1.19"
 actix-files = "0.6"
 
+# Session management
+actix-session = { version = "0.9", features = ["cookie-session"] }
+
+# OAuth2 client for social logins
+oauth2 = "4.4"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Additional serialization
+serde_urlencoded = "0.7"
+
 [dev-dependencies]
 # Testing
 actix-rt = "2.9"

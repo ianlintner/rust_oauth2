@@ -5,12 +5,14 @@ mod handlers;
 mod middleware;
 mod metrics;
 mod models;
+mod services;
 mod telemetry;
 
 use actix::Actor;
 use actix_cors::Cors;
 use actix_files::Files;
-use actix_web::{middleware as actix_middleware, web, App, HttpResponse, HttpServer};
+use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_web::{cookie::Key, middleware as actix_middleware, web, App, HttpResponse, HttpServer};
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
@@ -48,7 +50,7 @@ use utoipa_swagger_ui::SwaggerUi;
     info(
         title = "OAuth2 Server API",
         version = "0.1.0",
-        description = "A complete OAuth2 server implementation with Actix-web",
+        description = "A complete OAuth2 server implementation with Actix-web, featuring social logins and OIDC support",
         contact(
             name = "API Support",
             email = "support@example.com"
@@ -76,6 +78,10 @@ async fn main() -> std::io::Result<()> {
     let config = config::Config::default();
     tracing::info!("Configuration loaded");
 
+    // Load social login configuration
+    let social_config = Arc::new(models::SocialLoginConfig::from_env());
+    tracing::info!("Social login configuration loaded");
+
     // Initialize metrics
     let metrics = metrics::Metrics::new()
         .expect("Failed to initialize metrics");
@@ -92,6 +98,9 @@ async fn main() -> std::io::Result<()> {
     let db = Arc::new(db);
     let jwt_secret = config.jwt.secret.clone();
 
+    // Generate session key (in production, load from secure storage)
+    let session_key = Key::generate();
+
     // Start actors
     let token_actor = actors::TokenActor::new(db.clone(), jwt_secret.clone()).start();
     let client_actor = actors::ClientActor::new(db.clone()).start();
@@ -104,6 +113,7 @@ async fn main() -> std::io::Result<()> {
 
     let bind_addr = format!("{}:{}", config.server.host, config.server.port);
     tracing::info!("Starting server at http://{}", bind_addr);
+    tracing::info!("Login page available at http://{}/auth/login", bind_addr);
     tracing::info!("Swagger UI available at http://{}/swagger-ui", bind_addr);
     tracing::info!("Admin dashboard at http://{}/admin", bind_addr);
     tracing::info!("Metrics endpoint at http://{}/metrics", bind_addr);
@@ -118,6 +128,10 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             // Middleware
+            .wrap(SessionMiddleware::new(
+                CookieSessionStore::default(),
+                session_key.clone(),
+            ))
             .wrap(TracingLogger::default())
             .wrap(actix_middleware::Logger::default())
             .wrap(actix_middleware::Compress::default())
@@ -130,6 +144,30 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(jwt_secret.clone()))
             .app_data(web::Data::new(db.clone()))
             .app_data(web::Data::new(metrics.clone()))
+            .app_data(web::Data::new(social_config.clone()))
+            // Root route
+            .route("/", web::get().to(|| async {
+                HttpResponse::Found()
+                    .append_header(("Location", "/auth/login"))
+                    .finish()
+            }))
+            // Authentication routes
+            .service(
+                web::scope("/auth")
+                    .route("/login", web::get().to(handlers::auth::login_page))
+                    .route("/logout", web::post().to(handlers::auth::logout))
+                    .route("/success", web::get().to(handlers::auth::auth_success))
+                    .service(
+                        web::scope("/login")
+                            .route("/google", web::get().to(handlers::auth::google_login))
+                            .route("/microsoft", web::get().to(handlers::auth::microsoft_login))
+                            .route("/github", web::get().to(handlers::auth::github_login))
+                            .route("/azure", web::get().to(handlers::auth::microsoft_login)) // Azure uses Microsoft
+                            .route("/okta", web::get().to(handlers::auth::google_login)) // Placeholder
+                            .route("/auth0", web::get().to(handlers::auth::google_login)) // Placeholder
+                    )
+                    .route("/callback/{provider}", web::get().to(handlers::auth::auth_callback))
+            )
             // OAuth2 endpoints
             .service(
                 web::scope("/oauth")
@@ -161,6 +199,8 @@ async fn main() -> std::io::Result<()> {
                             .route("/clients/{id}", web::delete().to(handlers::admin::delete_client))
                     )
             )
+            // Error page
+            .route("/error", web::get().to(error_page))
             // Observability endpoints
             .route("/health", web::get().to(handlers::admin::health))
             .route("/ready", web::get().to(handlers::admin::readiness))
@@ -199,6 +239,26 @@ async fn admin_dashboard() -> HttpResponse {
                     <li><a href="/metrics">Prometheus Metrics</a></li>
                     <li><a href="/health">Health Check</a></li>
                 </ul>
+            </body>
+            </html>
+        "#.to_string());
+    
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(html)
+}
+
+// Error page
+async fn error_page() -> HttpResponse {
+    let html = std::fs::read_to_string("templates/error.html")
+        .unwrap_or_else(|_| r#"
+            <!DOCTYPE html>
+            <html>
+            <head><title>Error</title></head>
+            <body>
+                <h1>Error</h1>
+                <p>An error occurred.</p>
+                <a href="/">Go back</a>
             </body>
             </html>
         "#.to_string());
