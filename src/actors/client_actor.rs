@@ -86,7 +86,13 @@ impl Handler<ValidateClient> for ClientActor {
             let client = db.get_client(&msg.client_id).await?
                 .ok_or_else(|| OAuth2Error::invalid_client("Client not found"))?;
             
-            Ok(client.client_secret == msg.client_secret)
+            // Use constant-time comparison to prevent timing attacks
+            use subtle::ConstantTimeEq;
+            let secret_match = client.client_secret.as_bytes()
+                .ct_eq(msg.client_secret.as_bytes())
+                .into();
+            
+            Ok(secret_match)
         })
     }
 }

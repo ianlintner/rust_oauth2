@@ -28,6 +28,8 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.21"
 argon2 = "0.5"
+subtle = "2.5"
+hex = "0.4"
 
 # UUID generation
 uuid = { version = "1.6", features = ["v4", "serde"] }

@@ -87,8 +87,20 @@ async fn main() -> std::io::Result<()> {
     let db = Arc::new(db);
     let jwt_secret = config.jwt.secret.clone();
 
-    // Generate session key (in production, load from secure storage)
-    let session_key = Key::generate();
+    // Load session key from environment or generate a new one
+    // In production, OAUTH2_SESSION_KEY should be set to a persistent value
+    let session_key = if let Ok(key_str) = std::env::var("OAUTH2_SESSION_KEY") {
+        if key_str.len() < 64 {
+            panic!("OAUTH2_SESSION_KEY must be at least 64 characters (128 hex digits)");
+        }
+        let key_bytes = hex::decode(&key_str)
+            .expect("OAUTH2_SESSION_KEY must be valid hexadecimal");
+        Key::try_from(&key_bytes[..])
+            .expect("OAUTH2_SESSION_KEY must be exactly 64 bytes")
+    } else {
+        tracing::warn!("OAUTH2_SESSION_KEY not set. Generating random key. Sessions will not persist across restarts!");
+        Key::generate()
+    };
 
     // Start actors
     let token_actor = actors::TokenActor::new(db.clone(), jwt_secret.clone()).start();
@@ -151,9 +163,15 @@ async fn main() -> std::io::Result<()> {
                             .route("/google", web::get().to(handlers::auth::google_login))
                             .route("/microsoft", web::get().to(handlers::auth::microsoft_login))
                             .route("/github", web::get().to(handlers::auth::github_login))
-                            .route("/azure", web::get().to(handlers::auth::microsoft_login)) // Azure uses Microsoft
-                            .route("/okta", web::get().to(handlers::auth::google_login)) // Placeholder
-                            .route("/auth0", web::get().to(handlers::auth::google_login)) // Placeholder
+                            .route("/azure", web::get().to(handlers::auth::microsoft_login)) // Azure uses Microsoft endpoint
+                            // NOTE: Okta and Auth0 handlers not yet implemented - buttons should be hidden in UI
+                            // or implement proper handlers in handlers::auth module
+                            .route("/okta", web::get().to(|| async {
+                                actix_web::HttpResponse::ServiceUnavailable().body("Okta login not yet implemented")
+                            }))
+                            .route("/auth0", web::get().to(|| async {
+                                actix_web::HttpResponse::ServiceUnavailable().body("Auth0 login not yet implemented")
+                            }))
                     )
                     .route("/callback/{provider}", web::get().to(handlers::auth::auth_callback))
             )
