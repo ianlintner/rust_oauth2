@@ -123,10 +123,12 @@ fn validate_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
         "plain" => challenge == verifier,
         "S256" => {
             use sha2::{Sha256, Digest};
+            use base64::{Engine as _, engine::general_purpose};
+            
             let mut hasher = Sha256::new();
             hasher.update(verifier.as_bytes());
             let result = hasher.finalize();
-            let encoded = base64::encode_config(result, base64::URL_SAFE_NO_PAD);
+            let encoded = general_purpose::URL_SAFE_NO_PAD.encode(result);
             challenge == encoded
         }
         _ => false,

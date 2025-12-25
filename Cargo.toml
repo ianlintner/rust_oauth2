@@ -69,6 +69,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-opentelemetry = "0.22"
 tracing-actix-web = "0.7"
 
+# Async utilities
+futures = "0.3"
+
 # Admin UI templating
 tera = "1.19"
 actix-files = "0.6"

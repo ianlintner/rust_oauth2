@@ -2,9 +2,10 @@ use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Claims {
     pub sub: String,        // Subject (user ID)
     pub iss: String,        // Issuer
@@ -57,7 +58,7 @@ impl Claims {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Token {
     pub id: String,
     pub access_token: String,
@@ -108,7 +109,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct TokenResponse {
     pub access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -131,7 +132,7 @@ impl From<Token> for TokenResponse {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct IntrospectionResponse {
     pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

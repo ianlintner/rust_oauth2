@@ -31,7 +31,7 @@ pub struct TokenInfo {
 
 /// Admin dashboard - shows overview statistics
 pub async fn dashboard(
-    db: web::Data<Arc<Database>>,
+    _db: web::Data<Arc<Database>>,
 ) -> Result<HttpResponse> {
     // In a real implementation, fetch actual stats from database
     let data = DashboardData {
@@ -46,7 +46,7 @@ pub async fn dashboard(
 
 /// List all registered clients
 pub async fn list_clients(
-    db: web::Data<Arc<Database>>,
+    _db: web::Data<Arc<Database>>,
 ) -> Result<HttpResponse> {
     // In a real implementation, fetch from database
     let clients: Vec<ClientInfo> = vec![];
@@ -55,7 +55,7 @@ pub async fn list_clients(
 
 /// List all active tokens
 pub async fn list_tokens(
-    db: web::Data<Arc<Database>>,
+    _db: web::Data<Arc<Database>>,
 ) -> Result<HttpResponse> {
     // In a real implementation, fetch from database
     let tokens: Vec<TokenInfo> = vec![];
@@ -78,8 +78,8 @@ pub async fn admin_revoke_token(
 
 /// Delete a client (admin function)
 pub async fn delete_client(
-    client_id: web::Path<String>,
-    db: web::Data<Arc<Database>>,
+    _client_id: web::Path<String>,
+    _db: web::Data<Arc<Database>>,
 ) -> Result<HttpResponse> {
     // In a real implementation, delete client and associated tokens
     Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -113,7 +113,7 @@ pub async fn health() -> Result<HttpResponse> {
 
 /// Readiness check endpoint
 pub async fn readiness(
-    db: web::Data<Arc<Database>>,
+    _db: web::Data<Arc<Database>>,
 ) -> Result<HttpResponse> {
     // Check database connectivity
     // In a real implementation, execute a simple query

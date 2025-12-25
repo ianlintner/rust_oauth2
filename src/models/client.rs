@@ -1,12 +1,14 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Client {
     pub id: String,
     pub client_id: String,
+    #[schema(write_only)]
     pub client_secret: String,
     pub redirect_uris: String, // JSON array stored as string
     pub grant_types: String,   // JSON array stored as string
@@ -56,7 +58,7 @@ impl Client {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ClientRegistration {
     pub client_name: String,
     pub redirect_uris: Vec<String>,
@@ -64,7 +66,7 @@ pub struct ClientRegistration {
     pub scope: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ClientCredentials {
     pub client_id: String,
     pub client_secret: String,

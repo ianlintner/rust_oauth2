@@ -6,27 +6,8 @@ use opentelemetry_sdk::{
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 pub fn init_telemetry(service_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Configure OpenTelemetry tracer
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint("http://localhost:4317"), // OTLP endpoint
-        )
-        .with_trace_config(
-            trace::config()
-                .with_sampler(Sampler::AlwaysOn)
-                .with_id_generator(RandomIdGenerator::default())
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    service_name.to_string(),
-                )])),
-        )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
-
-    // Setup tracing subscriber with multiple layers
-    let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+    // For now, use a simplified tracing setup without OTLP
+    // In production, configure OTLP exporter with proper endpoint
     
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info"));
@@ -39,7 +20,6 @@ pub fn init_telemetry(service_name: &str) -> Result<(), Box<dyn std::error::Erro
 
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(telemetry_layer)
         .with(formatting_layer)
         .init();
 

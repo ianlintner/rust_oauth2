@@ -20,17 +20,6 @@ use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(
-        handlers::oauth::authorize,
-        handlers::oauth::token,
-        handlers::token::introspect,
-        handlers::token::revoke,
-        handlers::client::register_client,
-        handlers::wellknown::openid_configuration,
-        handlers::admin::health,
-        handlers::admin::readiness,
-        handlers::admin::system_metrics,
-    ),
     components(
         schemas(
             models::TokenResponse,
