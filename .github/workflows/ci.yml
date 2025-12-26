@@ -155,9 +155,14 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Run Flyway Migrations
-        uses: docker://flyway/flyway:10-alpine
-        with:
-          args: -url=jdbc:postgresql://postgres:5432/oauth2_test -user=test_user -password=test_password -locations=filesystem:./migrations/sql migrate
+        run: |
+          docker run --rm --network host -v ${{ github.workspace }}/migrations/sql:/flyway/sql \
+            flyway/flyway:10-alpine \
+            -url=jdbc:postgresql://localhost:5432/oauth2_test \
+            -user=test_user \
+            -password=test_password \
+            -locations=filesystem:/flyway/sql \
+            migrate
 
       - name: Run Integration Tests
         env:
@@ -210,6 +215,8 @@ jobs:
     name: Build Documentation
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
