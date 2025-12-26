@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flyway-migrations
+  namespace: oauth2-server
+data:
+  V1__initial_schema.sql: |
+    CREATE TABLE IF NOT EXISTS oauth2_clients (
+      id TEXT PRIMARY KEY,
+      client_secret_hash TEXT NOT NULL,
+      redirect_uris TEXT NOT NULL,
+      grant_types TEXT NOT NULL,
+      response_types TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS oauth2_authorization_codes (
+      code TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      code_challenge TEXT,
+      code_challenge_method TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP NOT NULL,
+      FOREIGN KEY (client_id) REFERENCES oauth2_clients(id)
+    );
+    
+    CREATE TABLE IF NOT EXISTS oauth2_tokens (
+      access_token TEXT PRIMARY KEY,
+      token_type TEXT NOT NULL DEFAULT 'Bearer',
+      client_id TEXT NOT NULL,
+      user_id TEXT,
+      scope TEXT NOT NULL,
+      refresh_token TEXT UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP NOT NULL,
+      refresh_expires_at TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES oauth2_clients(id)
+    );
+    
+    CREATE INDEX idx_authorization_codes_expires ON oauth2_authorization_codes(expires_at);
+    CREATE INDEX idx_tokens_expires ON oauth2_tokens(expires_at);
+    CREATE INDEX idx_tokens_refresh ON oauth2_tokens(refresh_token);

@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the pre-built binary
-COPY target/release/rust_oauth2_server /app/oauth2_server
+COPY target/release/rust_oauth2_server /app/rust_oauth2_server
+RUN chmod +x /app/rust_oauth2_server
 
 # Copy templates and static files
 COPY templates ./templates
@@ -31,4 +32,4 @@ ENV OAUTH2_DATABASE_URL=sqlite:/app/data/oauth2.db
 ENV RUST_LOG=info
 
 # Run the binary
-CMD ["/app/oauth2_server"]
+CMD ["/app/rust_oauth2_server"]

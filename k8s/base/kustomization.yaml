@@ -5,7 +5,9 @@ namespace: oauth2-server
 
 resources:
   - namespace.yaml
+  - rbac.yaml
   - configmap.yaml
+  - configmap-migrations.yaml
   - secret.yaml
   - postgres-pvc.yaml
   - postgres-statefulset.yaml
@@ -13,16 +15,12 @@ resources:
   - flyway-migration-job.yaml
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
-  - hpa.yaml
-  - rbac.yaml
+  - service-nodeport.yaml
 
 images:
   - name: ghcr.io/ianlintner/rust_oauth2_server
-    newTag: latest
+    newTag: test
 
 commonLabels:
   app.kubernetes.io/name: oauth2-server
-  app.kubernetes.io/instance: production
-  app.kubernetes.io/component: authentication
-  app.kubernetes.io/part-of: oauth2-system
+  app.kubernetes.io/instance: test

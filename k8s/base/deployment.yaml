@@ -36,6 +36,11 @@ spec:
         - name: oauth2-server
           image: ghcr.io/ianlintner/rust_oauth2_server:latest
           imagePullPolicy: Always
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export OAUTH2_DATABASE_URL="postgresql://oauth2_user:${POSTGRES_PASSWORD}@postgres:5432/oauth2"
+              exec /app/rust_oauth2_server
           ports:
             - name: http
               containerPort: 8080
@@ -56,8 +61,6 @@ spec:
                 secretKeyRef:
                   name: oauth2-server-secret
                   key: POSTGRES_PASSWORD
-            - name: OAUTH2_DATABASE_URL
-              value: "postgresql://oauth2_user:$(POSTGRES_PASSWORD)@postgres:5432/oauth2"
             - name: OAUTH2_JWT_SECRET
               valueFrom:
                 secretKeyRef:
