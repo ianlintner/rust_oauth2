@@ -165,29 +165,30 @@ If credentials are compromised:
 **Severity:** Medium (5.9)  
 **Affected:** rsa 0.9.9 (transitive dependency via sqlx-mysql)  
 **Description:** Marvin Attack - potential key recovery through timing sidechannels
+**Last Updated:** 2025-12-26
 
 **Mitigation:**
-- This is a transitive dependency from sqlx-mysql
+- This is a transitive dependency from sqlx-mysql via sqlx-macros
 - The server primarily uses SQLite and PostgreSQL, not MySQL
-- If MySQL support is not needed, consider removing the mysql feature from sqlx
+- The mysql feature is pulled in by sqlx's "macros" feature which requires "any" database support
 - The vulnerability affects RSA PKCS#1 v1.5 decryption operations
-- Monitor for updates to sqlx that include a patched version of rsa
+- This server does not use RSA encryption/decryption operations in its code
+- Monitor for updates to sqlx or rsa that include a patched version
 
-### Unmaintained Dependencies (Warnings)
+### Previously Resolved Vulnerabilities
 
-The following transitive dependencies are unmaintained but have low risk:
+The following vulnerabilities have been resolved through dependency updates:
 
-1. **proc-macro-error** (via utoipa-gen)
-   - Only used at compile time
-   - No runtime security impact
+1. **proc-macro-error (RUSTSEC-2024-0370)** - RESOLVED ✅
+   - Fixed by updating utoipa from 4.x to 5.4
+   - Status: No longer a transitive dependency
 
-2. **rustls-pemfile 1.0.4** (via reqwest)
-   - Superseded by rustls-pemfile 2.x
-   - Waiting for reqwest to update
+2. **rustls-pemfile (RUSTSEC-2025-0134)** - RESOLVED ✅
+   - Fixed by updating reqwest from 0.11 to 0.12 and oauth2 from 4.4 to 5.0
+   - Status: Now using maintained version via updated dependencies
 
-3. **yaml-rust** (via config crate)
-   - Only used for configuration parsing
-   - Limited exposure
-   - Consider migrating to alternative config format (TOML/JSON)
+3. **yaml-rust (RUSTSEC-2024-0320)** - RESOLVED ✅
+   - Fixed by updating config from 0.13 to 0.15
+   - Status: config 0.15 no longer depends on yaml-rust
 
 **Action:** Run `cargo audit` regularly and update dependencies when patches become available.
