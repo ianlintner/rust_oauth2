@@ -217,10 +217,11 @@ mod token_model_tests {
     fn test_scope_validation() {
         // Test that scope contains only valid characters
         let valid_scope = "read:user write:posts";
-        assert!(!valid_scope.contains(|c: char| !c.is_alphanumeric() && c != ':' && c != ' ' && c != '_'));
+        let has_invalid_chars = valid_scope.chars().any(|c| !c.is_alphanumeric() && c != ':' && c != ' ' && c != '_');
+        assert!(!has_invalid_chars, "Valid scope should not contain invalid characters");
         
         let invalid_scope = "read<script>";
-        assert!(invalid_scope.contains('<'));
+        assert!(invalid_scope.contains('<'), "Invalid scope should contain dangerous characters");
     }
 }
 
@@ -292,18 +293,24 @@ mod client_validation_tests {
     }
 
     #[test]
-    fn test_invalid_redirect_uri() {
-        // Test that invalid redirect URIs are rejected
-        let invalid_uris = vec![
-            "javascript:alert(1)",
-            "data:text/html,<script>alert(1)</script>",
-            "http://evil.com#http://good.com",
-        ];
-        
-        for uri in invalid_uris {
-            // Should reject javascript: and data: schemes
-            assert!(uri.starts_with("javascript:") || uri.starts_with("data:") || uri.contains('#'));
-        }
+    fn test_invalid_redirect_uri_javascript_scheme() {
+        // Test that javascript: scheme URIs are rejected
+        let uri = "javascript:alert(1)";
+        assert!(uri.starts_with("javascript:"), "Should detect javascript: scheme");
+    }
+
+    #[test]
+    fn test_invalid_redirect_uri_data_scheme() {
+        // Test that data: scheme URIs are rejected
+        let uri = "data:text/html,<script>alert(1)</script>";
+        assert!(uri.starts_with("data:"), "Should detect data: scheme");
+    }
+
+    #[test]
+    fn test_invalid_redirect_uri_fragment() {
+        // Test that URIs with fragments that could be used for open redirect are detected
+        let uri = "http://evil.com#http://good.com";
+        assert!(uri.contains('#'), "Should detect fragment in URI");
     }
 }
 
@@ -415,7 +422,6 @@ mod security_tests {
         let challenge = general_purpose::URL_SAFE_NO_PAD.encode(hash);
         
         assert!(!challenge.is_empty());
-        assert!(challenge.len() > 0);
     }
 
     #[test]

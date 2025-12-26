@@ -58,7 +58,12 @@ async fn request_authorization_with_scope(world: &mut OAuth2World, scope: String
     // Check if there's an allowed_scope set (for error handling scenario)
     if let Some(allowed_scope) = world.token_metadata.get("allowed_scope") {
         // This is the error handling scenario - check if requested scope is allowed
-        if !allowed_scope.contains(&scope) {
+        // Split scopes and check for exact matches
+        let allowed_scopes: Vec<&str> = allowed_scope.split_whitespace().collect();
+        let requested_scopes: Vec<&str> = scope.split_whitespace().collect();
+        
+        let all_allowed = requested_scopes.iter().all(|s| allowed_scopes.contains(s));
+        if !all_allowed {
             world.error = Some("invalid_scope".to_string());
             return;
         }
