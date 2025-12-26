@@ -449,6 +449,16 @@ async fn unregistered_client_request(world: &mut OAuth2World) {
     world.error = Some("invalid_client".to_string());
 }
 
+#[given(expr = "a client is registered with scope {string}")]
+async fn client_registered_with_scope(world: &mut OAuth2World, scope: String) {
+    world.client_id = Some("test_client".to_string());
+    world.scope = Some(scope.clone());
+    // Store the allowed scope for validation
+    world
+        .token_metadata
+        .insert("allowed_scope".to_string(), scope);
+}
+
 #[when("the user denies authorization")]
 async fn user_denies_authorization(world: &mut OAuth2World) {
     world.error = Some("access_denied".to_string());

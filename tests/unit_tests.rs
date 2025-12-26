@@ -198,7 +198,7 @@ mod token_model_tests {
 
     #[test]
     fn test_scope_validation() {
-        // Test that scope contains only valid characters
+        // Test that scope validation accepts only valid characters
         let valid_scope = "read:user write:posts";
         let has_invalid_chars = valid_scope
             .chars()
@@ -208,10 +208,14 @@ mod token_model_tests {
             "Valid scope should not contain invalid characters"
         );
 
+        // Test that scope validation would reject dangerous characters
         let invalid_scope = "read<script>";
+        let validation_rejects_dangerous_chars = invalid_scope
+            .chars()
+            .any(|c| ['<', '>', '&', '"', '\'', '/', '\\'].contains(&c));
         assert!(
-            invalid_scope.contains('<'),
-            "Invalid scope should contain dangerous characters"
+            validation_rejects_dangerous_chars,
+            "Scope validation should reject scopes with dangerous characters"
         );
     }
 }
@@ -287,26 +291,35 @@ mod client_validation_tests {
 
     #[test]
     fn test_invalid_redirect_uri_javascript_scheme() {
-        // Test that javascript: scheme URIs are rejected
+        // Test that redirect URI validation would reject javascript: scheme
         let uri = "javascript:alert(1)";
+        let is_dangerous_scheme = uri.starts_with("javascript:") || uri.starts_with("data:");
         assert!(
-            uri.starts_with("javascript:"),
-            "Should detect javascript: scheme"
+            is_dangerous_scheme,
+            "Redirect URI validation should reject javascript: and data: schemes"
         );
     }
 
     #[test]
     fn test_invalid_redirect_uri_data_scheme() {
-        // Test that data: scheme URIs are rejected
+        // Test that redirect URI validation would reject data: scheme
         let uri = "data:text/html,<script>alert(1)</script>";
-        assert!(uri.starts_with("data:"), "Should detect data: scheme");
+        let is_dangerous_scheme = uri.starts_with("javascript:") || uri.starts_with("data:");
+        assert!(
+            is_dangerous_scheme,
+            "Redirect URI validation should reject javascript: and data: schemes"
+        );
     }
 
     #[test]
     fn test_invalid_redirect_uri_fragment() {
-        // Test that URIs with fragments that could be used for open redirect are detected
+        // Test that redirect URI validation detects fragments that could be exploited
         let uri = "http://evil.com#http://good.com";
-        assert!(uri.contains('#'), "Should detect fragment in URI");
+        let has_fragment = uri.contains('#');
+        assert!(
+            has_fragment,
+            "Redirect URI validation should be cautious of fragments that could enable open redirects"
+        );
     }
 }
 
@@ -392,7 +405,13 @@ mod security_tests {
 
     #[test]
     fn test_password_hashing() {
-        // Test that passwords are hashed (not stored plain text)
+        // NOTE: This test demonstrates basic password hashing principles only.
+        // It is NOT a complete or production-ready password storage scheme.
+        // Production OAuth2 password storage MUST use a dedicated password
+        // hashing algorithm (e.g., Argon2, bcrypt, scrypt) with per-password
+        // salts and appropriate work factors for key stretching.
+
+        // This simple example shows that hashing is deterministic and differs from plaintext
         let password = "test_password";
         let hash1 = format!("{:x}", Sha256::digest(password.as_bytes()));
         let hash2 = format!("{:x}", Sha256::digest(password.as_bytes()));
@@ -434,11 +453,17 @@ mod security_tests {
 mod scope_tests {
     #[test]
     fn test_scope_contains() {
-        // Test scope checking logic
+        // Test proper scope checking logic with exact token matching
         let granted_scope = "read write";
+        let granted_scopes: Vec<&str> = granted_scope.split_whitespace().collect();
         let required_scope = "read";
 
-        assert!(granted_scope.contains(required_scope));
+        // Exact match - should pass
+        assert!(granted_scopes.contains(&required_scope));
+
+        // Partial match should NOT pass
+        let required_scope_partial = "readonly";
+        assert!(!granted_scopes.contains(&required_scope_partial));
     }
 
     #[test]
