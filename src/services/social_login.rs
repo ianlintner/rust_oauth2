@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 
 use crate::models::{OAuth2Error, ProviderConfig, SocialUserInfo};
-use oauth2::{basic::BasicClient, AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl, EndpointSet, EndpointNotSet};
+use oauth2::{
+    basic::BasicClient, AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
+    TokenUrl,
+};
 use serde::Deserialize;
 
 // Type alias for a fully configured OAuth2 client with all required endpoints set.
@@ -12,10 +15,7 @@ use serde::Deserialize;
 // - Endpoint states: auth URL (Set), token URL (Set), device/introspection/revocation (NotSet)
 type ConfiguredClient = oauth2::Client<
     oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
-    oauth2::StandardTokenResponse<
-        oauth2::EmptyExtraTokenFields,
-        oauth2::basic::BasicTokenType,
-    >,
+    oauth2::StandardTokenResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
     oauth2::StandardTokenIntrospectionResponse<
         oauth2::EmptyExtraTokenFields,
         oauth2::basic::BasicTokenType,

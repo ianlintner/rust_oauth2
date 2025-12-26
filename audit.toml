@@ -1,0 +1,14 @@
+# Configuration for cargo-audit
+# This file configures which advisories to ignore
+
+[advisories]
+# Ignore specific vulnerabilities that cannot be fixed or are not applicable
+
+# RUSTSEC-2023-0071: RSA timing attack vulnerability
+# Status: No fix available
+# Reason: Transitive dependency via sqlx-mysql. Application does not use MySQL
+#         or perform RSA encryption/decryption operations.
+# Severity: Medium (5.9)
+ignore = [
+    "RUSTSEC-2023-0071",
+]
