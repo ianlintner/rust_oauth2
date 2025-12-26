@@ -1,0 +1,99 @@
+[package]
+name = "rust_oauth2_server"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ian Lintner"]
+description = "A complete OAuth2 server implementation using Actix-web and the actor model"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ianlintner/rust_oauth2"
+
+[dependencies]
+# Actix Web Framework
+actix-web = "4.4"
+actix-rt = "2.9"
+actix = "0.13"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# JWT handling
+jsonwebtoken = "9.2"
+
+# Cryptography
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.21"
+argon2 = "0.5"
+subtle = "2.5"
+hex = "0.4"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Configuration
+config = "0.13"
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# Database (SQLite for simplicity, can be extended)
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid"] }
+
+# OpenAPI
+utoipa = { version = "4.1", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "5.0", features = ["actix-web"] }
+
+# CORS
+actix-cors = "0.7"
+
+# Metrics and Observability
+prometheus = "0.13"
+actix-web-prometheus = "0.1"
+
+# OpenTelemetry
+opentelemetry = { version = "0.21", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.14", features = ["trace", "metrics"] }
+opentelemetry-prometheus = "0.14"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.22"
+tracing-actix-web = "0.7"
+
+# Async utilities
+futures = "0.3"
+
+# Admin UI templating
+tera = "1.19"
+actix-files = "0.6"
+
+# Session management
+actix-session = { version = "0.9", features = ["cookie-session"] }
+
+# OAuth2 client for social logins
+oauth2 = "4.4"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Additional serialization
+serde_urlencoded = "0.7"
+
+[dev-dependencies]
+# Testing
+actix-rt = "2.9"
+cucumber = { version = "0.20", features = ["macros"] }
+futures = "0.3"
+
+[[test]]
+name = "bdd"
+harness = false

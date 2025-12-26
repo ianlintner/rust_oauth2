@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth2 Server - Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>OAuth2 Server Admin Dashboard</h1>
+            <nav>
+                <a href="/admin">Dashboard</a>
+                <a href="/admin/clients">Clients</a>
+                <a href="/admin/tokens">Tokens</a>
+                <a href="/admin/users">Users</a>
+                <a href="/metrics">Metrics</a>
+                <a href="/swagger-ui">API Docs</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Clients</h3>
+                    <p class="stat-value" id="total-clients">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Users</h3>
+                    <p class="stat-value" id="total-users">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Tokens</h3>
+                    <p class="stat-value" id="active-tokens">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Requests</h3>
+                    <p class="stat-value" id="total-requests">0</p>
+                </div>
+            </section>
+
+            <section class="charts">
+                <div class="chart-container">
+                    <h3>Token Issuance Rate</h3>
+                    <canvas id="tokenChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Request Rate</h3>
+                    <canvas id="requestChart"></canvas>
+                </div>
+            </section>
+
+            <section class="recent-activity">
+                <h3>Recent Activity</h3>
+                <table id="activity-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Event</th>
+                            <th>Client</th>
+                            <th>User</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+        </main>
+
+        <footer>
+            <p>OAuth2 Server v0.1.0 | <a href="/health">Health</a> | <a href="/ready">Readiness</a></p>
+        </footer>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

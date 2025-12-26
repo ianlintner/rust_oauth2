@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database (optional - can use SQLite instead)
+  postgres:
+    image: postgres:15-alpine
+    container_name: oauth2_postgres
+    environment:
+      POSTGRES_DB: oauth2
+      POSTGRES_USER: oauth2_user
+      POSTGRES_PASSWORD: oauth2_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oauth2_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flyway migration service
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: oauth2_flyway
+    command: migrate
+    volumes:
+      - ./migrations/sql:/flyway/sql
+      - ./flyway.conf:/flyway/conf/flyway.conf
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://postgres:5432/oauth2
+      - FLYWAY_USER=oauth2_user
+      - FLYWAY_PASSWORD=oauth2_password
+      - FLYWAY_SCHEMAS=public
+      - FLYWAY_LOCATIONS=filesystem:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # OAuth2 Server (uncomment after building the image)
+  # oauth2_server:
+  #   build: .
+  #   container_name: oauth2_server
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - OAUTH2_SERVER_HOST=0.0.0.0
+  #     - OAUTH2_SERVER_PORT=8080
+  #     - OAUTH2_DATABASE_URL=postgresql://oauth2_user:oauth2_password@postgres:5432/oauth2
+  #     - OAUTH2_JWT_SECRET=change-me-in-production
+  #   depends_on:
+  #     - flyway
+
+volumes:
+  postgres_data:

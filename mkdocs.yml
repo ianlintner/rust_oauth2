@@ -1,0 +1,90 @@
+site_name: Rust OAuth2 Server
+site_description: A complete OAuth2 authorization server built with Rust and Actix-web
+site_author: Ian Lintner
+repo_url: https://github.com/ianlintner/rust_oauth2
+repo_name: ianlintner/rust_oauth2
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mermaid2
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Actor Model: architecture/actors.md
+      - Database: architecture/database.md
+  - OAuth2 Flows:
+      - Authorization Code: flows/authorization-code.md
+      - Client Credentials: flows/client-credentials.md
+      - Password Grant: flows/password.md
+      - Refresh Token: flows/refresh-token.md
+  - API Reference:
+      - Endpoints: api/endpoints.md
+      - Authentication: api/authentication.md
+      - Error Handling: api/errors.md
+  - Observability:
+      - Metrics: observability/metrics.md
+      - Tracing: observability/tracing.md
+      - Logging: observability/logging.md
+      - Health Checks: observability/health.md
+  - Admin Panel:
+      - Dashboard: admin/dashboard.md
+      - Client Management: admin/clients.md
+      - Token Management: admin/tokens.md
+  - Deployment:
+      - Docker: deployment/docker.md
+      - Kubernetes: deployment/kubernetes.md
+      - Production: deployment/production.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+      - CI/CD: development/cicd.md
