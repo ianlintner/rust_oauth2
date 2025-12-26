@@ -20,8 +20,10 @@ dotenv.config();
 
 // Configuration
 const OAUTH2_BASE_URL = process.env.OAUTH2_BASE_URL || 'http://localhost:8080';
-const OAUTH2_CLIENT_ID = process.env.OAUTH2_CLIENT_ID;
-const OAUTH2_CLIENT_SECRET = process.env.OAUTH2_CLIENT_SECRET;
+// Optional: Default client credentials can be configured via environment variables
+// These are used as defaults but can be overridden per-request
+// const OAUTH2_CLIENT_ID = process.env.OAUTH2_CLIENT_ID;
+// const OAUTH2_CLIENT_SECRET = process.env.OAUTH2_CLIENT_SECRET;
 
 /**
  * OAuth2 API Client

@@ -15,6 +15,23 @@ spec:
       labels:
         app: oauth2-server
     spec:
+      serviceAccountName: oauth2-server
+      initContainers:
+        - name: wait-for-migrations
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for database migrations job to complete..."
+              kubectl wait --for=condition=complete --timeout=300s job/flyway-migration -n "${KUBERNETES_NAMESPACE}" || true
+              echo "Migration job completed or timed out, checking status..."
+              kubectl get job/flyway-migration -n "${KUBERNETES_NAMESPACE}" || echo "Migration job not found, proceeding..."
+          env:
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
       containers:
         - name: oauth2-server
           image: ghcr.io/ianlintner/rust_oauth2_server:latest
@@ -34,11 +51,13 @@ spec:
                 configMapKeyRef:
                   name: oauth2-server-config
                   key: OAUTH2_SERVER_PORT
-            - name: OAUTH2_DATABASE_URL
+            - name: POSTGRES_PASSWORD
               valueFrom:
-                configMapKeyRef:
-                  name: oauth2-server-config
-                  key: OAUTH2_DATABASE_URL
+                secretKeyRef:
+                  name: oauth2-server-secret
+                  key: POSTGRES_PASSWORD
+            - name: OAUTH2_DATABASE_URL
+              value: "postgresql://oauth2_user:$(POSTGRES_PASSWORD)@postgres:5432/oauth2"
             - name: OAUTH2_JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -77,12 +96,3 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-      initContainers:
-        - name: wait-for-migrations
-          image: busybox:latest
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for database migrations to complete..."
-              sleep 30
