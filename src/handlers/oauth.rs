@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeQuery {
+    #[allow(dead_code)] // OAuth2 spec field, will be validated in future
     response_type: String,
     client_id: String,
     redirect_uri: String,
@@ -57,6 +58,7 @@ pub struct TokenRequest {
     redirect_uri: Option<String>,
     client_id: String,
     client_secret: Option<String>,
+    #[allow(dead_code)] // OAuth2 refresh token grant, planned for future
     refresh_token: Option<String>,
     username: Option<String>,
     password: Option<String>,

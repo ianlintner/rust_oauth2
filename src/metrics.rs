@@ -10,17 +10,25 @@ pub struct Metrics {
     pub http_request_duration_seconds: Histogram,
 
     // OAuth2 metrics
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_token_issued_total: IntCounter,
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_token_revoked_total: IntCounter,
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_authorization_codes_issued: IntCounter,
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_failed_authentications: IntCounter,
 
     // Client metrics
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_clients_total: IntGauge,
+    #[allow(dead_code)] // Planned for observability implementation
     pub oauth_active_tokens: IntGauge,
 
     // Database metrics
+    #[allow(dead_code)] // Planned for observability implementation
     pub db_queries_total: Counter,
+    #[allow(dead_code)] // Planned for observability implementation
     pub db_query_duration_seconds: Histogram,
 }
 

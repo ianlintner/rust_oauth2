@@ -21,11 +21,9 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_bdd_world_creation() {
-        let world = OAuth2World::default();
+        let world = super::OAuth2World::default();
         assert_eq!(world.server_url, "http://localhost:8080");
         assert!(world.client_id.is_none());
     }

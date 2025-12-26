@@ -7,6 +7,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct IntrospectRequest {
     token: String,
+    #[allow(dead_code)] // OAuth2 spec field, can be used for optimization
     token_type_hint: Option<String>,
 }
 
@@ -63,6 +64,7 @@ pub async fn introspect(
 #[derive(Debug, Deserialize)]
 pub struct RevokeRequest {
     token: String,
+    #[allow(dead_code)] // OAuth2 spec field, can be used for optimization
     token_type_hint: Option<String>,
 }
 
