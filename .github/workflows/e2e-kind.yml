@@ -87,15 +87,7 @@ jobs:
           cp kustomization.yaml kustomization.yaml.bak
           cat > deployment-e2e-kind-patch.json << 'EOF'
           [
-            {"op":"replace","path":"/spec/replicas","value":1},
-            {"op":"remove","path":"/spec/template/spec/initContainers"},
-            {"op":"remove","path":"/spec/template/spec/containers/0/command"},
-            {"op":"remove","path":"/spec/template/spec/containers/0/args"},
-            {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"OAUTH2_DATABASE_URL","value":"sqlite:/app/data/oauth2.db"}},
-            {"op":"add","path":"/spec/template/spec/volumes","value":[]},
-            {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"data","emptyDir":{}}},
-            {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts","value":[]},
-            {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"data","mountPath":"/app/data"}}
+            {"op":"replace","path":"/spec/replicas","value":1}
           ]
           EOF
           cat > kustomization.yaml << EOF
@@ -108,7 +100,11 @@ jobs:
             - namespace.yaml
             - rbac.yaml
             - configmap.yaml
+            - configmap-migrations.yaml
             - secret.yaml
+            - postgres-statefulset.yaml
+            - postgres-service.yaml
+            - flyway-migration-job.yaml
             - deployment.yaml
             - service-nodeport.yaml
 
