@@ -180,7 +180,27 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=postgres -n oauth2-server --timeout=120s
 
           echo "Waiting for Flyway migration job to complete..."
-          kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=180s
+          if ! kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=300s; then
+            echo "Flyway migration job did not complete in time. Dumping diagnostics..."
+
+            kubectl get job flyway-migration -n oauth2-server -o wide || true
+            kubectl describe job flyway-migration -n oauth2-server || true
+            kubectl get pods -n oauth2-server -l job-name=flyway-migration -o wide || true
+
+            pods=$(kubectl get pods -n oauth2-server -l job-name=flyway-migration -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+            for pod in $pods; do
+              echo "--- describe pod/$pod"
+              kubectl describe pod "$pod" -n oauth2-server || true
+              echo "--- logs pod/$pod (init: wait-for-postgres)"
+              kubectl logs "$pod" -n oauth2-server -c wait-for-postgres --tail=200 || true
+              echo "--- logs pod/$pod (container: flyway)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --tail=400 || true
+              echo "--- logs pod/$pod (container: flyway, previous)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --previous --tail=400 || true
+            done
+
+            exit 1
+          fi
 
       - name: Wait for OAuth2 server
         run: |
