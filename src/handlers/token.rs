@@ -18,6 +18,13 @@ pub async fn introspect(
     token_actor: web::Data<Addr<TokenActor>>,
     jwt_secret: web::Data<String>,
 ) -> Result<HttpResponse, OAuth2Error> {
+    let token_prefix = form.token.chars().take(20).collect::<String>();
+    tracing::info!(
+        token_len = form.token.len(),
+        token_prefix = %token_prefix,
+        "Token introspection requested"
+    );
+
     // Try to validate the token
     let token_result = token_actor
         .send(ValidateToken {
@@ -50,7 +57,13 @@ pub async fn introspect(
 
             Ok(HttpResponse::Ok().json(response))
         }
-        Err(_) => {
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                token_len = form.token.len(),
+                token_prefix = %token_prefix,
+                "Token introspection failed; returning inactive"
+            );
             // Token is invalid
             let response = IntrospectionResponse {
                 active: false,

@@ -129,14 +129,37 @@ impl Handler<ValidateToken> for TokenActor {
     fn handle(&mut self, msg: ValidateToken, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
         let event_actor = self.event_actor.clone();
+        let raw_token = msg.token;
 
         Box::pin(async move {
+            // Be forgiving about whitespace and callers that accidentally include a Bearer prefix.
+            let token_trimmed = raw_token.trim();
+            let token_normalized = token_trimmed
+                .strip_prefix("Bearer ")
+                .unwrap_or(token_trimmed)
+                .trim();
+
+            let token_prefix = token_normalized.chars().take(20).collect::<String>();
+            tracing::info!(
+                token_len = token_normalized.len(),
+                token_prefix = %token_prefix,
+                "ValidateToken called"
+            );
+
             let token = db
-                .get_token_by_access_token(&msg.token)
+                .get_token_by_access_token(token_normalized)
                 .await?
                 .ok_or_else(|| OAuth2Error::invalid_grant("Token not found"))?;
 
             if !token.is_valid() {
+                tracing::warn!(
+                    revoked = token.revoked,
+                    expires_at = %token.expires_at,
+                    now = %chrono::Utc::now(),
+                    token_len = token_normalized.len(),
+                    token_prefix = %token_prefix,
+                    "Token is not valid (expired or revoked)"
+                );
                 // Emit expired/invalid event
                 if let Some(event_actor) = &event_actor {
                     let event = AuthEvent::new(
