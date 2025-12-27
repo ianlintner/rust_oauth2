@@ -438,13 +438,13 @@ cargo audit --deny warnings
 
 ```bash
 # Scan Docker image with Trivy
-trivy image gabby.azurecr.io/oauth2-server:latest
+trivy image docker.io/ianlintner068/oauth2-server:latest
 
 # Scan for HIGH and CRITICAL only
-trivy image --severity HIGH,CRITICAL gabby.azurecr.io/oauth2-server:latest
+trivy image --severity HIGH,CRITICAL docker.io/ianlintner068/oauth2-server:latest
 
 # Fail CI on vulnerabilities
-trivy image --exit-code 1 --severity CRITICAL gabby.azurecr.io/oauth2-server:latest
+trivy image --exit-code 1 --severity CRITICAL docker.io/ianlintner068/oauth2-server:latest
 ```
 
 ### Static Code Analysis

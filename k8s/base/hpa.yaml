@@ -2,7 +2,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: oauth2-server
-  namespace: oauth2-server
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
