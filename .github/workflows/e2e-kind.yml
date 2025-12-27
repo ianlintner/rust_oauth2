@@ -93,81 +93,15 @@ jobs:
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
 
-      - name: Create ConfigMap for migrations
+      - name: Ensure namespace exists
         run: |
           kubectl create namespace oauth2-server || true
-          kubectl create configmap flyway-migrations \
-            --from-file=migrations/sql/ \
-            -n oauth2-server
-
-      - name: Update Kustomization for test
-        run: |
-          cd k8s/base
-          cp kustomization.yaml kustomization.yaml.bak
-          cat > deployment-e2e-kind-patch.json << 'EOF'
-          [
-            {"op":"replace","path":"/spec/replicas","value":1}
-          ]
-          EOF
-          cat > kustomization.yaml << EOF
-          apiVersion: kustomize.config.k8s.io/v1beta1
-          kind: Kustomization
-          
-          namespace: oauth2-server
-          
-          resources:
-            - namespace.yaml
-            - rbac.yaml
-            - configmap.yaml
-            - configmap-migrations.yaml
-            - secret.yaml
-            - postgres-statefulset.yaml
-            - postgres-service.yaml
-            - flyway-migration-job.yaml
-            - deployment.yaml
-            - service-nodeport.yaml
-
-          patchesJson6902:
-            - target:
-                group: apps
-                version: v1
-                kind: Deployment
-                name: oauth2-server
-              path: deployment-e2e-kind-patch.json
-          
-          images:
-            - name: docker.io/ianlintner068/oauth2-server
-              newTag: test
-          
-          commonLabels:
-            app.kubernetes.io/name: oauth2-server
-            app.kubernetes.io/instance: test
-          EOF
-
-      - name: Create NodePort Service for testing
-        run: |
-          cat > k8s/base/service-nodeport.yaml << EOF
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: oauth2-server
-            namespace: oauth2-server
-          spec:
-            type: NodePort
-            ports:
-              - port: 80
-                targetPort: 8080
-                nodePort: 30080
-                protocol: TCP
-                name: http
-            selector:
-              app: oauth2-server
-          EOF
 
       - name: Deploy to KIND
         run: |
           # Use the kustomize binary we installed above (kubectl's embedded kustomize can lag)
-          kustomize build k8s/base > /tmp/kustomize-rendered.yaml
+          # Render via the dedicated e2e-kind overlay (does not mutate k8s/base).
+          kustomize build k8s/overlays/e2e-kind > /tmp/kustomize-rendered.yaml
 
           echo "Rendered Deployment excerpt (sanity check):"
           awk '
@@ -180,7 +114,7 @@ jobs:
 
           # Ensure migration job is fresh and uses the latest configmap
           kubectl delete job flyway-migration -n oauth2-server --ignore-not-found
-          kubectl apply -f k8s/base/flyway-migration-job.yaml
+          kubectl apply -f /tmp/kustomize-rendered.yaml
 
           echo "Waiting for Postgres to become ready..."
           kubectl wait --for=condition=ready pod -l app=postgres -n oauth2-server --timeout=120s

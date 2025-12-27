@@ -116,6 +116,17 @@ Configure your AI assistant (e.g., Claude Desktop) to use the MCP server for OAu
 
 ### Local Testing with K8s
 
+For repeatable end-to-end testing that matches CI (KIND + Postgres + Flyway + real HTTP calls), use the script:
+
+```bash
+./scripts/e2e_kind.sh
+```
+
+Notes:
+- Uses `kubectl port-forward` to avoid host port conflicts.
+- Builds the container image via `Dockerfile` (Linux build) so it works on macOS.
+- Cleans up the namespace and cluster by default (set `--keep-cluster` / `--keep-namespace` to debug).
+
 1. **Install KIND**
    ```bash
    curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
