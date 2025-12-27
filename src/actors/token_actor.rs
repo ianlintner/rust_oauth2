@@ -57,10 +57,7 @@ impl Handler<CreateToken> for TokenActor {
         let event_actor = self.event_actor.clone();
 
         Box::pin(async move {
-            let subject = msg
-                .user_id
-                .clone()
-                .unwrap_or_else(|| msg.client_id.clone());
+            let subject = msg.user_id.clone().unwrap_or_else(|| msg.client_id.clone());
 
             // Create access token
             let access_claims = Claims::new(
