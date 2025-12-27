@@ -15,6 +15,8 @@ IMAGE_REF="${IMAGE_REF:-docker.io/ianlintner068/oauth2-server:test}"
 KUSTOMIZE_DIR="${KUSTOMIZE_DIR:-k8s/overlays/e2e-kind}"
 KEEP_CLUSTER="${KEEP_CLUSTER:-0}"
 KEEP_NAMESPACE="${KEEP_NAMESPACE:-0}"
+SKIP_IMAGE_BUILD="${SKIP_IMAGE_BUILD:-0}"
+PORT="${PORT:-}"
 
 _usage() {
   cat <<'USAGE'
@@ -27,6 +29,8 @@ Environment overrides:
   KUSTOMIZE_DIR  (default: k8s/overlays/e2e-kind)
   KEEP_CLUSTER   (default: 0)
   KEEP_NAMESPACE (default: 0)
+  SKIP_IMAGE_BUILD (default: 0)
+  PORT (optional: fixed local port for port-forward)
 
 Notes:
 - This script uses kubectl port-forward (no NodePort host port conflicts).
@@ -85,7 +89,6 @@ _require curl
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PORT=""
 PORT_FWD_PID=""
 
 _cleanup() {
@@ -148,9 +151,18 @@ fi
 
 kind create cluster --name "${CLUSTER_NAME}"
 
-echo "==> Building container image (${IMAGE_REF}) using Dockerfile"
-# Build inside Docker so the resulting binary matches the Linux node OS.
-docker build -t "${IMAGE_REF}" -f Dockerfile .
+if [[ "${SKIP_IMAGE_BUILD}" == "1" ]]; then
+  echo "==> Skipping image build (SKIP_IMAGE_BUILD=1); verifying image exists: ${IMAGE_REF}"
+  if ! docker image inspect "${IMAGE_REF}" >/dev/null 2>&1; then
+    echo "Image not found locally: ${IMAGE_REF}" >&2
+    echo "Either build it first (e.g. via CI Docker build step) or unset SKIP_IMAGE_BUILD." >&2
+    exit 1
+  fi
+else
+  echo "==> Building container image (${IMAGE_REF}) using Dockerfile"
+  # Build inside Docker so the resulting binary matches the Linux node OS.
+  docker build -t "${IMAGE_REF}" -f Dockerfile .
+fi
 
 echo "==> Loading image into KIND"
 kind load docker-image "${IMAGE_REF}" --name "${CLUSTER_NAME}"
@@ -183,7 +195,9 @@ if ! kubectl rollout status deployment/oauth2-server -n "${NAMESPACE}" --timeout
   exit 1
 fi
 
-PORT="$(_free_port)"
+if [[ -z "${PORT}" ]]; then
+  PORT="$(_free_port)"
+fi
 BASE_URL="http://127.0.0.1:${PORT}"
 
 echo "==> Port-forwarding svc/oauth2-server ${PORT}:80"

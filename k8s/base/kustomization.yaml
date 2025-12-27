@@ -17,12 +17,14 @@ resources:
   - hpa.yaml
   - deployment.yaml
   - service.yaml
-  - service-nodeport.yaml
 
 images:
   - name: docker.io/ianlintner068/oauth2-server
     newTag: latest
 
-commonLabels:
-  app.kubernetes.io/name: oauth2-server
-  app.kubernetes.io/instance: test
+labels:
+  - pairs:
+      app.kubernetes.io/name: oauth2-server
+      app.kubernetes.io/instance: test
+    includeSelectors: true
+    includeTemplates: true

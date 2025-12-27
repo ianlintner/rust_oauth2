@@ -39,36 +39,11 @@ jobs:
           sudo mv kind /usr/local/bin/kind
           kind version
 
-      - name: Create KIND cluster config
-        run: |
-          cat <<EOF > kind-config.yaml
-          kind: Cluster
-          apiVersion: kind.x-k8s.io/v1alpha4
-          nodes:
-            - role: control-plane
-              extraPortMappings:
-                - containerPort: 30080
-                  hostPort: 8080
-                  protocol: TCP
-          EOF
-
-      - name: Build Rust + create KIND cluster (overlapped)
+      - name: Build Rust release binary
         shell: bash
         run: |
           set -euo pipefail
-
-          echo "Starting Rust release build in background..."
-          cargo build --release --locked &
-          build_pid=$!
-
-          echo "Creating KIND cluster..."
-          kind create cluster --name oauth2-test --config kind-config.yaml
-
-          echo "Enabling config debug logging..."
-          echo "OAUTH2_DEBUG_CONFIG=1" >> "$GITHUB_ENV"
-
-          echo "Waiting for Rust build to finish..."
-          wait "$build_pid"
+          cargo build --release --locked
           test -f target/release/rust_oauth2_server
 
       - name: Build Docker image
@@ -84,164 +59,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Load image into KIND
-        run: |
-          kind load docker-image docker.io/ianlintner068/oauth2-server:test --name oauth2-test
-
       - name: Install kustomize
         run: |
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
 
-      - name: Ensure namespace exists
+      - name: Run E2E (shared script)
+        shell: bash
         run: |
-          kubectl create namespace oauth2-server || true
-
-      - name: Deploy to KIND
-        run: |
-          # Use the kustomize binary we installed above (kubectl's embedded kustomize can lag)
-          # Render via the dedicated e2e-kind overlay (does not mutate k8s/base).
-          kustomize build k8s/overlays/e2e-kind > /tmp/kustomize-rendered.yaml
-
-          echo "Rendered Deployment excerpt (sanity check):"
-          awk '
-            $0 ~ /^kind: Deployment$/ {in_dep=1}
-            in_dep {print}
-            in_dep && $0 ~ /^---$/ {exit}
-          ' /tmp/kustomize-rendered.yaml | grep -E "kind: Deployment|name: oauth2-server|replicas:|initContainers:|OAUTH2_DATABASE_URL|volumeMounts:|mountPath: /app/data|volumes:|emptyDir" || true
-
-          kubectl apply -f /tmp/kustomize-rendered.yaml
-
-          # Ensure migration job is fresh and uses the latest configmap
-          kubectl delete job flyway-migration -n oauth2-server --ignore-not-found
-          kubectl apply -f /tmp/kustomize-rendered.yaml
-
-          echo "Waiting for Postgres to become ready..."
-          kubectl wait --for=condition=ready pod -l app=postgres -n oauth2-server --timeout=120s
-
-          echo "Waiting for Flyway migration job to complete..."
-          if ! kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=300s; then
-            echo "Flyway migration job did not complete in time. Dumping diagnostics..."
-
-            kubectl get job flyway-migration -n oauth2-server -o wide || true
-            kubectl describe job flyway-migration -n oauth2-server || true
-            kubectl get pods -n oauth2-server -l job-name=flyway-migration -o wide || true
-
-            pods=$(kubectl get pods -n oauth2-server -l job-name=flyway-migration -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
-            for pod in $pods; do
-              echo "--- describe pod/$pod"
-              kubectl describe pod "$pod" -n oauth2-server || true
-              echo "--- logs pod/$pod (init: wait-for-postgres)"
-              kubectl logs "$pod" -n oauth2-server -c wait-for-postgres --tail=200 || true
-              echo "--- logs pod/$pod (container: flyway)"
-              kubectl logs "$pod" -n oauth2-server -c flyway --tail=400 || true
-              echo "--- logs pod/$pod (container: flyway, previous)"
-              kubectl logs "$pod" -n oauth2-server -c flyway --previous --tail=400 || true
-            done
-
-            exit 1
-          fi
-
-      - name: Wait for OAuth2 server
-        run: |
-          echo "Waiting for deployment to be ready..."
-          kubectl rollout status deployment/oauth2-server -n oauth2-server --timeout=180s
-
-      - name: Check deployment status
-        run: |
-          kubectl get all -n oauth2-server
-          kubectl describe deployment oauth2-server -n oauth2-server
-
-      - name: Check server logs
-        if: always()
-        run: |
-          kubectl logs deployment/oauth2-server -n oauth2-server -c oauth2-server --tail=100 || echo "No logs available yet"
-
-      - name: Test health endpoint
-        run: |
-          sleep 10
-          curl -f http://localhost:8080/health || (kubectl logs deployment/oauth2-server -n oauth2-server && exit 1)
-
-      - name: Test readiness endpoint
-        run: |
-          curl -f http://localhost:8080/ready
-
-      - name: Test OpenID configuration
-        run: |
-          curl -f http://localhost:8080/.well-known/openid-configuration
-
-      - name: Register test client
-        run: |
-          response=$(curl -X POST http://localhost:8080/clients/register \
-            -H "Content-Type: application/json" \
-            -d '{
-              "client_name": "Test Client",
-              "redirect_uris": ["http://localhost:3000/callback"],
-              "grant_types": ["client_credentials"],
-              "scope": "read write"
-            }')
-          echo "Client registration response: $response"
-          echo "$response" > /tmp/client.json
-
-      - name: Get access token
-        run: |
-          client_id=$(cat /tmp/client.json | jq -r '.client_id')
-          client_secret=$(cat /tmp/client.json | jq -r '.client_secret')
-          
-          token_response=$(curl -X POST http://localhost:8080/oauth/token \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret&scope=read")
-          
-          echo "Token response: $token_response"
-          access_token=$(echo "$token_response" | jq -r '.access_token')
-          if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
-            echo "Failed to obtain access token"
-            exit 1
-          fi
-          echo "$access_token" > /tmp/token.txt
-
-      - name: Introspect token
-        run: |
-          client_id=$(cat /tmp/client.json | jq -r '.client_id')
-          client_secret=$(cat /tmp/client.json | jq -r '.client_secret')
-          token=$(cat /tmp/token.txt)
-          
-          introspect_response=$(curl -X POST http://localhost:8080/oauth/introspect \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "token=$token&client_id=$client_id&client_secret=$client_secret")
-          
-          echo "Introspection response: $introspect_response"
-          
-          # Verify token is active
-          active=$(echo "$introspect_response" | jq -r '.active')
-          if [ "$active" != "true" ]; then
-            echo "Token is not active!"
-            kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 || true
-            kubectl get pods -n oauth2-server -o wide || true
-            exit 1
-          fi
-
-      - name: Test metrics endpoint
-        run: |
-          curl -f http://localhost:8080/metrics | head -20
-
-      - name: Export cluster logs
-        if: failure()
-        run: |
-          kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 > oauth2-server.log || echo "No oauth2-server logs"
-          kubectl describe pods -n oauth2-server > pods-describe.log
-
-      - name: Upload logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kind-cluster-logs
-          path: |
-            oauth2-server.log
-            pods-describe.log
-          retention-days: 7
-
-      - name: Cleanup
-        if: always()
-        run: |
-          kubectl delete namespace oauth2-server || true
+          set -euo pipefail
+          # Reuse the CI-built image (loaded into the local Docker daemon by build-push-action).
+          # The script will still load it into KIND and run the full deploy + HTTP checks.
+          SKIP_IMAGE_BUILD=1 \
+          CLUSTER_NAME=oauth2-test \
+          IMAGE_REF=docker.io/ianlintner068/oauth2-server:test \
+          bash scripts/e2e_kind.sh
