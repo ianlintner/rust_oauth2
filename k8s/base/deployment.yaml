@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oauth2-server
-  namespace: oauth2-server
   labels:
     app: oauth2-server
 spec:
@@ -34,8 +33,8 @@ spec:
                   fieldPath: metadata.namespace
       containers:
         - name: oauth2-server
-          image: ghcr.io/ianlintner/rust_oauth2_server:latest
-          imagePullPolicy: Always
+          image: docker.io/ianlintner068/oauth2-server:latest
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |

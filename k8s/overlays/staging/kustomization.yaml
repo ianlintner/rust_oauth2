@@ -15,5 +15,5 @@ patchesStrategicMerge:
   - ingress-patch.yaml
 
 images:
-  - name: ghcr.io/ianlintner/rust_oauth2_server
+  - name: docker.io/ianlintner068/oauth2-server
     newTag: staging

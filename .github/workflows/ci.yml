@@ -8,33 +8,24 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: 1
   OAUTH2_JWT_SECRET: "test-jwt-secret-for-ci-only-do-not-use-in-production-32chars"
 
 jobs:
-  # Code Quality Checks
-  quality:
-    name: Code Quality
+  ci:
+    name: Rust (fmt, clippy, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
           toolchain: stable
           components: rustfmt, clippy
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-key: ci
+          install-system-deps: 'true'
 
       - name: Check Formatting
         run: cargo fmt -- --check
@@ -42,93 +33,77 @@ jobs:
       - name: Clippy Linting
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Run Tests
+        run: cargo test --verbose --all-features --locked
+
+      - name: Build release binary (cached)
+        run: |
+          cargo build --release --locked
+          test -f target/release/rust_oauth2_server
+
+      - name: Upload release binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release/rust_oauth2_server
+          if-no-files-found: error
+
   # Security Scanning
   security:
-    name: Security Scanning
+    name: Security (audit, deny)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          toolchain: stable
+          cache-key: security
+          install-system-deps: 'true'
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
 
-      - name: Security Audit
+      - name: Security Audit (cargo-audit)
         continue-on-error: true
         run: cargo audit
 
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Check Dependencies
+      - name: Check Dependencies (cargo-deny)
         continue-on-error: true
-        run: cargo deny check
-
-  # Build and Test
-  build-and-test:
-    name: Build and Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, beta]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: EmbarkStudios/cargo-deny-action@v1
         with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --verbose --all-features
-
-      - name: Run Tests
-        run: cargo test --verbose --all-features
+          command: check
 
   # Code Coverage
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: coverage
+          install-system-deps: 'true'
 
       - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
       - name: Generate Coverage
-        run: cargo tarpaulin --out Xml --output-dir ./coverage
+        run: cargo tarpaulin --out Xml --output-dir ./coverage --all-features --locked
 
       - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/cobertura.xml
           fail_ci_if_error: false
@@ -137,6 +112,7 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    needs: [ci]
     services:
       postgres:
         image: postgres:15
@@ -154,8 +130,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: integration
+          install-system-deps: 'true'
 
       - name: Run Flyway Migrations
         run: |
@@ -164,41 +144,144 @@ jobs:
             -url=jdbc:postgresql://localhost:5432/oauth2_test \
             -user=test_user \
             -password=test_password \
+            -connectRetries=20 \
+            -connectRetriesInterval=3 \
             -locations=filesystem:/flyway/sql \
             migrate
 
       - name: Run Integration Tests
         env:
           OAUTH2_DATABASE_URL: postgresql://test_user:test_password@localhost:5432/oauth2_test
-        run: cargo test --test integration
+        run: cargo test --test integration --locked
+
+  # E2E Tests on KIND (reuses prebuilt binary from the 'ci' job)
+  e2e-kind:
+    name: E2E Tests on KIND
+    runs-on: ubuntu-latest
+    needs: [ci]
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download prebuilt server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release
+
+      - name: Ensure binary is executable
+        run: chmod +x target/release/rust_oauth2_server
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install KIND
+        shell: bash
+        run: |
+          set -euo pipefail
+          KIND_VERSION="v0.24.0"
+          curl -fsSL -o kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          kind version
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Enable config debug logging
+        run: echo "OAUTH2_DEBUG_CONFIG=1" >> $GITHUB_ENV
+
+      - name: Build Docker image (from prebuilt binary)
+        timeout-minutes: 20
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.prebuilt
+          tags: docker.io/ianlintner068/oauth2-server:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run E2E (shared script)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep cluster + namespace so the next steps can export/upload logs if the script fails.
+          SKIP_IMAGE_BUILD=1 \
+          KEEP_CLUSTER=1 \
+          KEEP_NAMESPACE=1 \
+          CLUSTER_NAME=oauth2-test \
+          NAMESPACE=oauth2-server \
+          IMAGE_REF=docker.io/ianlintner068/oauth2-server:test \
+          bash scripts/e2e_kind.sh
+
+      - name: Export cluster logs
+        if: failure()
+        run: |
+          kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 > oauth2-server.log || echo "No oauth2-server logs"
+          kubectl describe pods -n oauth2-server > pods-describe.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-cluster-logs
+          path: |
+            oauth2-server.log
+            pods-describe.log
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kubectl delete namespace oauth2-server || true
+          kind delete cluster --name oauth2-test || true
 
   # Docker Build
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [quality, security, build-and-test]
+    needs: [ci, security, integration, e2e-kind]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download prebuilt server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release
+
+      - name: Ensure binary is executable
+        run: chmod +x target/release/rust_oauth2_server
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: |
+            docker.io/${{ secrets.DOCKER_USERNAME }}/oauth2-server
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -208,6 +291,7 @@ jobs:
         with:
           context: .
           push: true
+          file: Dockerfile.prebuilt
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -228,8 +312,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: docs
+          install-system-deps: 'true'
 
       - name: Build Rust Docs
         run: cargo doc --no-deps --all-features
@@ -238,6 +326,14 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/mkdocs.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install MkDocs
         run: |
@@ -274,7 +370,7 @@ jobs:
   gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [quality, security, build-and-test, coverage]
+    needs: [ci, security, integration, e2e-kind, coverage]
     if: always()
     steps:
       - name: Check Job Results
@@ -283,10 +379,16 @@ jobs:
           if [ "${{ needs.security.result }}" != "success" ]; then
             echo "⚠️  Security scan found issues (informational only)"
           fi
+
+          # Coverage is informational and may be skipped
+          if [ "${{ needs.coverage.result }}" = "failure" ]; then
+            echo "⚠️  Coverage job failed (informational only)"
+          fi
           
           # Only fail on critical job failures
-          if [ "${{ needs.quality.result }}" != "success" ] || \
-             [ "${{ needs.build-and-test.result }}" != "success" ]; then
+          if [ "${{ needs.ci.result }}" != "success" ] || \
+             [ "${{ needs.integration.result }}" != "success" ] || \
+             [ "${{ needs.e2e-kind.result }}" != "success" ]; then
             echo "Quality gate failed!"
             exit 1
           fi

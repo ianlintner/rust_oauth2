@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
@@ -8,23 +8,23 @@ pub struct Config {
     pub events: EventConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct JwtConfig {
     pub secret: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EventConfig {
     pub enabled: bool,
     pub backend: String,
@@ -101,5 +101,12 @@ impl Config {
         }
 
         Ok(())
+    }
+
+    /// Produce a version safe to log (secrets masked).
+    pub fn sanitized(&self) -> Self {
+        let mut clone = self.clone();
+        clone.jwt.secret = "***MASKED***".to_string();
+        clone
     }
 }
