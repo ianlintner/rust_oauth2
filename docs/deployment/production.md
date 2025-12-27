@@ -29,16 +29,24 @@ graph TB
     LB --> OAuth2[OAuth2 Server 2]
     LB --> OAuth3[OAuth2 Server 3]
     
-    OAuth1 & OAuth2 & OAuth3 --> DBPrimary[(PostgreSQL Primary)]
+    OAuth1 --> DBPrimary[(PostgreSQL Primary)]
+    OAuth2 --> DBPrimary
+    OAuth3 --> DBPrimary
     DBPrimary --> DBReplica1[(Replica 1)]
     DBPrimary --> DBReplica2[(Replica 2)]
     
-    OAuth1 & OAuth2 & OAuth3 --> Redis[(Redis Cache)]
+    OAuth1 --> Redis[(Redis Cache)]
+    OAuth2 --> Redis
+    OAuth3 --> Redis
     
-    OAuth1 & OAuth2 & OAuth3 --> OTLP[OTLP Collector]
+    OAuth1 --> OTLP[OTLP Collector]
+    OAuth2 --> OTLP
+    OAuth3 --> OTLP
     OTLP --> Jaeger[Jaeger]
     
-    Prometheus[Prometheus] --> OAuth1 & OAuth2 & OAuth3
+    Prometheus[Prometheus] --> OAuth1
+    Prometheus --> OAuth2
+    Prometheus --> OAuth3
     
     style WAF fill:#f44336,color:#fff
     style LB fill:#ff9800,color:#fff
