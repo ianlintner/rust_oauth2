@@ -89,7 +89,7 @@ jobs:
             {"op":"remove","path":"/spec/template/spec/initContainers"},
             {"op":"remove","path":"/spec/template/spec/containers/0/command"},
             {"op":"remove","path":"/spec/template/spec/containers/0/args"},
-            {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"OAUTH2_DATABASE_URL","value":"sqlite:///app/data/oauth2.db"}},
+            {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"OAUTH2_DATABASE_URL","value":"sqlite:/app/data/oauth2.db"}},
             {"op":"add","path":"/spec/template/spec/volumes","value":[]},
             {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"data","emptyDir":{}}},
             {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts","value":[]},
