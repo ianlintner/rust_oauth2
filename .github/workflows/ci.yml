@@ -19,17 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
           toolchain: stable
           components: rustfmt, clippy
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          cache-on-failure: true
+          cache-key: ci
+          install-system-deps: 'true'
 
       - name: Check Formatting
         run: cargo fmt -- --check
@@ -60,14 +56,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          shared-key: security
-          cache-on-failure: true
+          toolchain: stable
+          cache-key: security
+          install-system-deps: 'true'
 
       - name: Install cargo-audit
         uses: taiki-e/install-action@v2
@@ -93,14 +87,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          shared-key: coverage
-          cache-on-failure: true
+          toolchain: stable
+          cache-key: coverage
+          install-system-deps: 'true'
 
       - name: Install tarpaulin
         uses: taiki-e/install-action@v2
@@ -138,14 +130,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          shared-key: integration
-          cache-on-failure: true
+          toolchain: stable
+          cache-key: integration
+          install-system-deps: 'true'
 
       - name: Run Flyway Migrations
         run: |
@@ -234,16 +224,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
           toolchain: stable
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: docs
-          cache-on-failure: true
+          cache-key: docs
+          install-system-deps: 'true'
 
       - name: Build Rust Docs
         run: cargo doc --no-deps --all-features
