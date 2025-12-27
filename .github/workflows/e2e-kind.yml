@@ -160,6 +160,8 @@ jobs:
           ' /tmp/kustomize-rendered.yaml | grep -E "kind: Deployment|name: oauth2-server|replicas:|initContainers:|OAUTH2_DATABASE_URL|volumeMounts:|mountPath: /app/data|volumes:|emptyDir" || true
 
           kubectl apply -f /tmp/kustomize-rendered.yaml
+            # Ensure migration job is created/applied before rollout checks
+            kubectl apply -f k8s/base/flyway-migration-job.yaml
 
       - name: Wait for OAuth2 server
         run: |
