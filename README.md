@@ -1,4 +1,5 @@
 # Rust OAuth2 Server
+[![CI/CD Pipeline](https://github.com/ianlintner/rust_oauth2_server/actions/workflows/ci.yml/badge.svg)](https://github.com/ianlintner/rust_oauth2_server/actions/workflows/ci.yml)
 
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/35cb987e-114a-41ea-b994-dfecb011b632" />
 
