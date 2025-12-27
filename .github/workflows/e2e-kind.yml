@@ -33,6 +33,11 @@ jobs:
           shared-key: e2e-kind
           cache-on-failure: true
 
+      - name: Install system dependencies for Rust build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
       - name: Create KIND cluster config
         run: |
           cat <<EOF > kind-config.yaml
@@ -54,6 +59,12 @@ jobs:
 
       - name: Enable config debug logging
         run: echo "OAUTH2_DEBUG_CONFIG=1" >> $GITHUB_ENV
+
+      - name: Build release binary (cached)
+        run: |
+          cargo build --release --locked
+          test -f target/release/rust_oauth2_server
+
       - name: Build Docker image
         # Cold builds (especially first-time cargo-chef cache population) can exceed 5 minutes.
         # Keep this generous to avoid flaky CI failures.
@@ -61,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile.ci
+          file: Dockerfile.prebuilt
           tags: docker.io/ianlintner068/oauth2-server:test
           load: true
           cache-from: type=gha
