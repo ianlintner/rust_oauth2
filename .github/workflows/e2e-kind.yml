@@ -1,19 +1,19 @@
 name: E2E Tests with KIND
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: 1
 
 jobs:
   e2e-kind:
     name: E2E Tests on KIND
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,26 +21,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          toolchain: stable
+          cache-key: e2e-kind
+          install-system-deps: 'true'
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust binary
+      - name: Install KIND
+        shell: bash
         run: |
-          cargo build --release
-          ls -lh target/release/
+          set -euo pipefail
+          # Pin a recent stable KIND release (bump as needed)
+          KIND_VERSION="v0.24.0"
+          curl -fsSL -o kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          kind version
 
       - name: Create KIND cluster config
         run: |
@@ -55,17 +52,41 @@ jobs:
                   protocol: TCP
           EOF
 
-      - name: Create KIND cluster
-        uses: helm/kind-action@v1.10.0
-        with:
-          cluster_name: oauth2-test
-          config: kind-config.yaml
+      - name: Build Rust + create KIND cluster (overlapped)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Starting Rust release build in background..."
+          cargo build --release --locked &
+          build_pid=$!
+
+          echo "Creating KIND cluster..."
+          kind create cluster --name oauth2-test --config kind-config.yaml
+
+          echo "Enabling config debug logging..."
+          echo "OAUTH2_DEBUG_CONFIG=1" >> "$GITHUB_ENV"
+
+          echo "Waiting for Rust build to finish..."
+          wait "$build_pid"
+          test -f target/release/rust_oauth2_server
 
       - name: Build Docker image
-        timeout-minutes: 5
+        # Cold builds (especially first-time cargo-chef cache population) can exceed 5 minutes.
+        # Keep this generous to avoid flaky CI failures.
+        timeout-minutes: 20
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.prebuilt
+          tags: docker.io/ianlintner068/oauth2-server:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load image into KIND
         run: |
-          docker build -f Dockerfile.ci -t ghcr.io/ianlintner/rust_oauth2_server:test .
-          kind load docker-image ghcr.io/ianlintner/rust_oauth2_server:test --name oauth2-test
+          kind load docker-image docker.io/ianlintner068/oauth2-server:test --name oauth2-test
 
       - name: Install kustomize
         run: |
@@ -83,6 +104,11 @@ jobs:
         run: |
           cd k8s/base
           cp kustomization.yaml kustomization.yaml.bak
+          cat > deployment-e2e-kind-patch.json << 'EOF'
+          [
+            {"op":"replace","path":"/spec/replicas","value":1}
+          ]
+          EOF
           cat > kustomization.yaml << EOF
           apiVersion: kustomize.config.k8s.io/v1beta1
           kind: Kustomization
@@ -91,17 +117,26 @@ jobs:
           
           resources:
             - namespace.yaml
+            - rbac.yaml
             - configmap.yaml
+            - configmap-migrations.yaml
             - secret.yaml
-            - postgres-pvc.yaml
             - postgres-statefulset.yaml
             - postgres-service.yaml
             - flyway-migration-job.yaml
             - deployment.yaml
             - service-nodeport.yaml
+
+          patchesJson6902:
+            - target:
+                group: apps
+                version: v1
+                kind: Deployment
+                name: oauth2-server
+              path: deployment-e2e-kind-patch.json
           
           images:
-            - name: ghcr.io/ianlintner/rust_oauth2_server
+            - name: docker.io/ianlintner068/oauth2-server
               newTag: test
           
           commonLabels:
@@ -131,22 +166,52 @@ jobs:
 
       - name: Deploy to KIND
         run: |
-          kubectl apply -k k8s/base
+          # Use the kustomize binary we installed above (kubectl's embedded kustomize can lag)
+          kustomize build k8s/base > /tmp/kustomize-rendered.yaml
 
-      - name: Wait for PostgreSQL
-        run: |
-          echo "Waiting for PostgreSQL StatefulSet to be ready..."
-          kubectl rollout status statefulset/postgres -n oauth2-server --timeout=300s
+          echo "Rendered Deployment excerpt (sanity check):"
+          awk '
+            $0 ~ /^kind: Deployment$/ {in_dep=1}
+            in_dep {print}
+            in_dep && $0 ~ /^---$/ {exit}
+          ' /tmp/kustomize-rendered.yaml | grep -E "kind: Deployment|name: oauth2-server|replicas:|initContainers:|OAUTH2_DATABASE_URL|volumeMounts:|mountPath: /app/data|volumes:|emptyDir" || true
 
-      - name: Wait for migrations
-        run: |
-          kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=300s || true
-          kubectl logs job/flyway-migration -n oauth2-server
+          kubectl apply -f /tmp/kustomize-rendered.yaml
+
+          # Ensure migration job is fresh and uses the latest configmap
+          kubectl delete job flyway-migration -n oauth2-server --ignore-not-found
+          kubectl apply -f k8s/base/flyway-migration-job.yaml
+
+          echo "Waiting for Postgres to become ready..."
+          kubectl wait --for=condition=ready pod -l app=postgres -n oauth2-server --timeout=120s
+
+          echo "Waiting for Flyway migration job to complete..."
+          if ! kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=300s; then
+            echo "Flyway migration job did not complete in time. Dumping diagnostics..."
+
+            kubectl get job flyway-migration -n oauth2-server -o wide || true
+            kubectl describe job flyway-migration -n oauth2-server || true
+            kubectl get pods -n oauth2-server -l job-name=flyway-migration -o wide || true
+
+            pods=$(kubectl get pods -n oauth2-server -l job-name=flyway-migration -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+            for pod in $pods; do
+              echo "--- describe pod/$pod"
+              kubectl describe pod "$pod" -n oauth2-server || true
+              echo "--- logs pod/$pod (init: wait-for-postgres)"
+              kubectl logs "$pod" -n oauth2-server -c wait-for-postgres --tail=200 || true
+              echo "--- logs pod/$pod (container: flyway)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --tail=400 || true
+              echo "--- logs pod/$pod (container: flyway, previous)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --previous --tail=400 || true
+            done
+
+            exit 1
+          fi
 
       - name: Wait for OAuth2 server
         run: |
           echo "Waiting for deployment to be ready..."
-          kubectl rollout status deployment/oauth2-server -n oauth2-server --timeout=300s
+          kubectl rollout status deployment/oauth2-server -n oauth2-server --timeout=180s
 
       - name: Check deployment status
         run: |
@@ -156,7 +221,7 @@ jobs:
       - name: Check server logs
         if: always()
         run: |
-          kubectl logs deployment/oauth2-server -n oauth2-server --tail=100 || echo "No logs available yet"
+          kubectl logs deployment/oauth2-server -n oauth2-server -c oauth2-server --tail=100 || echo "No logs available yet"
 
       - name: Test health endpoint
         run: |
@@ -194,7 +259,12 @@ jobs:
             -d "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret&scope=read")
           
           echo "Token response: $token_response"
-          echo "$token_response" | jq -r '.access_token' > /tmp/token.txt
+          access_token=$(echo "$token_response" | jq -r '.access_token')
+          if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+            echo "Failed to obtain access token"
+            exit 1
+          fi
+          echo "$access_token" > /tmp/token.txt
 
       - name: Introspect token
         run: |
@@ -212,6 +282,8 @@ jobs:
           active=$(echo "$introspect_response" | jq -r '.active')
           if [ "$active" != "true" ]; then
             echo "Token is not active!"
+            kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 || true
+            kubectl get pods -n oauth2-server -o wide || true
             exit 1
           fi
 
@@ -223,7 +295,6 @@ jobs:
         if: failure()
         run: |
           kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 > oauth2-server.log || echo "No oauth2-server logs"
-          kubectl logs statefulset/postgres -n oauth2-server --tail=200 > postgres.log || echo "No postgres logs"
           kubectl describe pods -n oauth2-server > pods-describe.log
 
       - name: Upload logs
@@ -233,7 +304,6 @@ jobs:
           name: kind-cluster-logs
           path: |
             oauth2-server.log
-            postgres.log
             pods-describe.log
           retention-days: 7
 

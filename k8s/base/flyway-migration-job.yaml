@@ -14,8 +14,10 @@ spec:
             - sh
             - -c
             - |
-              until pg_isready -h postgres -U oauth2_user; do
-                echo "Waiting for postgres..."
+              # pg_isready can return success while Postgres is still finalizing init scripts.
+              # Use an actual connection attempt against the target DB to avoid Flyway starting too early.
+              until PGPASSWORD="$PGPASSWORD" psql -h postgres -U oauth2_user -d oauth2 -c 'SELECT 1' >/dev/null 2>&1; do
+                echo "Waiting for postgres (db=oauth2, user=oauth2_user)..."
                 sleep 2
               done
           env:
@@ -27,7 +29,8 @@ spec:
       containers:
         - name: flyway
           image: flyway/flyway:10-alpine
-          command: ["flyway", "migrate"]
+          # Add connection retries to reduce flakiness during Postgres startup on KIND/CI.
+          command: ["flyway", "-connectRetries=60", "-connectRetriesInterval=3", "migrate"]
           env:
             - name: FLYWAY_URL
               value: "jdbc:postgresql://postgres:5432/oauth2"

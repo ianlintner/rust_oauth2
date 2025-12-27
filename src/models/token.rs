@@ -21,12 +21,12 @@ pub struct Claims {
 }
 
 impl Claims {
-    pub fn new(user_id: String, client_id: String, scope: String, duration_seconds: i64) -> Self {
+    pub fn new(subject: String, client_id: String, scope: String, duration_seconds: i64) -> Self {
         let now = Utc::now();
         let exp = now + Duration::seconds(duration_seconds);
 
         Self {
-            sub: user_id,
+            sub: subject,
             iss: "rust_oauth2_server".to_string(),
             aud: client_id.clone(),
             exp: exp.timestamp(),
@@ -61,10 +61,10 @@ pub struct Token {
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub token_type: String,
-    pub expires_in: i64,
+    pub expires_in: i32,
     pub scope: String,
     pub client_id: String,
-    pub user_id: String,
+    pub user_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revoked: bool,
@@ -75,12 +75,12 @@ impl Token {
         access_token: String,
         refresh_token: Option<String>,
         client_id: String,
-        user_id: String,
+        user_id: Option<String>,
         scope: String,
-        expires_in: i64,
+        expires_in: i32,
     ) -> Self {
         let now = Utc::now();
-        let expires_at = now + Duration::seconds(expires_in);
+        let expires_at = now + Duration::seconds(i64::from(expires_in));
 
         Self {
             id: Uuid::new_v4().to_string(),
@@ -112,7 +112,7 @@ pub struct TokenResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<String>,
     pub token_type: String,
-    pub expires_in: i64,
+    pub expires_in: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 }

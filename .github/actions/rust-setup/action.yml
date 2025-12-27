@@ -1,0 +1,46 @@
+name: rust-setup
+description: Install Rust toolchain + cache build artifacts (optionally install Linux system deps)
+
+inputs:
+  toolchain:
+    description: Rust toolchain version (e.g. stable, nightly)
+    required: false
+    default: stable
+  components:
+    description: Comma-separated Rust components to install (e.g. rustfmt, clippy)
+    required: false
+    default: ''
+  cache-key:
+    description: Shared cache key for Swatinem/rust-cache
+    required: false
+    default: ''
+  cache-on-failure:
+    description: Whether to save cache even if the job fails
+    required: false
+    default: 'true'
+  install-system-deps:
+    description: Install pkg-config and libssl-dev on Linux runners
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+
+    - name: Cache Rust build artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        cache-on-failure: ${{ inputs.cache-on-failure }}
+
+    - name: Install Linux system dependencies
+      if: runner.os == 'Linux' && inputs.install-system-deps == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev

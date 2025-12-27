@@ -8,33 +8,24 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: 1
   OAUTH2_JWT_SECRET: "test-jwt-secret-for-ci-only-do-not-use-in-production-32chars"
 
 jobs:
-  # Code Quality Checks
-  quality:
-    name: Code Quality
+  ci:
+    name: Rust (fmt, clippy, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
           toolchain: stable
           components: rustfmt, clippy
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-key: ci
+          install-system-deps: 'true'
 
       - name: Check Formatting
         run: cargo fmt -- --check
@@ -42,93 +33,77 @@ jobs:
       - name: Clippy Linting
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Run Tests
+        run: cargo test --verbose --all-features --locked
+
+      - name: Build release binary (cached)
+        run: |
+          cargo build --release --locked
+          test -f target/release/rust_oauth2_server
+
+      - name: Upload release binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release/rust_oauth2_server
+          if-no-files-found: error
+
   # Security Scanning
   security:
-    name: Security Scanning
+    name: Security (audit, deny)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          toolchain: stable
+          cache-key: security
+          install-system-deps: 'true'
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
 
-      - name: Security Audit
+      - name: Security Audit (cargo-audit)
         continue-on-error: true
         run: cargo audit
 
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Check Dependencies
+      - name: Check Dependencies (cargo-deny)
         continue-on-error: true
-        run: cargo deny check
-
-  # Build and Test
-  build-and-test:
-    name: Build and Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, beta]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: EmbarkStudios/cargo-deny-action@v1
         with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --verbose --all-features
-
-      - name: Run Tests
-        run: cargo test --verbose --all-features
+          command: check
 
   # Code Coverage
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: coverage
+          install-system-deps: 'true'
 
       - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
       - name: Generate Coverage
-        run: cargo tarpaulin --out Xml --output-dir ./coverage
+        run: cargo tarpaulin --out Xml --output-dir ./coverage --all-features --locked
 
       - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/cobertura.xml
           fail_ci_if_error: false
@@ -137,6 +112,7 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    needs: [ci]
     services:
       postgres:
         image: postgres:15
@@ -154,8 +130,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: integration
+          install-system-deps: 'true'
 
       - name: Run Flyway Migrations
         run: |
@@ -164,41 +144,341 @@ jobs:
             -url=jdbc:postgresql://localhost:5432/oauth2_test \
             -user=test_user \
             -password=test_password \
+            -connectRetries=20 \
+            -connectRetriesInterval=3 \
             -locations=filesystem:/flyway/sql \
             migrate
 
       - name: Run Integration Tests
         env:
           OAUTH2_DATABASE_URL: postgresql://test_user:test_password@localhost:5432/oauth2_test
-        run: cargo test --test integration
+        run: cargo test --test integration --locked
+
+  # E2E Tests on KIND (reuses prebuilt binary from the 'ci' job)
+  e2e-kind:
+    name: E2E Tests on KIND
+    runs-on: ubuntu-latest
+    needs: [ci]
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download prebuilt server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release
+
+      - name: Ensure binary is executable
+        run: chmod +x target/release/rust_oauth2_server
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create KIND cluster config
+        run: |
+          cat <<EOF > kind-config.yaml
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+              extraPortMappings:
+                - containerPort: 30080
+                  hostPort: 8080
+                  protocol: TCP
+          EOF
+
+      - name: Create KIND cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: oauth2-test
+          config: kind-config.yaml
+
+      - name: Enable config debug logging
+        run: echo "OAUTH2_DEBUG_CONFIG=1" >> $GITHUB_ENV
+
+      - name: Build Docker image (from prebuilt binary)
+        timeout-minutes: 20
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.prebuilt
+          tags: docker.io/ianlintner068/oauth2-server:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load image into KIND
+        run: |
+          kind load docker-image docker.io/ianlintner068/oauth2-server:test --name oauth2-test
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Create ConfigMap for migrations
+        run: |
+          kubectl create namespace oauth2-server || true
+          kubectl create configmap flyway-migrations \
+            --from-file=migrations/sql/ \
+            -n oauth2-server
+
+      - name: Update Kustomization for test
+        run: |
+          cd k8s/base
+          cp kustomization.yaml kustomization.yaml.bak
+          cat > deployment-e2e-kind-patch.json << 'EOF'
+          [
+            {"op":"replace","path":"/spec/replicas","value":1}
+          ]
+          EOF
+          cat > kustomization.yaml << EOF
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          
+          namespace: oauth2-server
+          
+          resources:
+            - namespace.yaml
+            - rbac.yaml
+            - configmap.yaml
+            - configmap-migrations.yaml
+            - secret.yaml
+            - postgres-statefulset.yaml
+            - postgres-service.yaml
+            - flyway-migration-job.yaml
+            - deployment.yaml
+            - service-nodeport.yaml
+
+          patchesJson6902:
+            - target:
+                group: apps
+                version: v1
+                kind: Deployment
+                name: oauth2-server
+              path: deployment-e2e-kind-patch.json
+          
+          images:
+            - name: docker.io/ianlintner068/oauth2-server
+              newTag: test
+          
+          commonLabels:
+            app.kubernetes.io/name: oauth2-server
+            app.kubernetes.io/instance: test
+          EOF
+
+      - name: Create NodePort Service for testing
+        run: |
+          cat > k8s/base/service-nodeport.yaml << EOF
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: oauth2-server
+            namespace: oauth2-server
+          spec:
+            type: NodePort
+            ports:
+              - port: 80
+                targetPort: 8080
+                nodePort: 30080
+                protocol: TCP
+                name: http
+            selector:
+              app: oauth2-server
+          EOF
+
+      - name: Deploy to KIND
+        run: |
+          # Use the kustomize binary we installed above (kubectl's embedded kustomize can lag)
+          kustomize build k8s/base > /tmp/kustomize-rendered.yaml
+
+          echo "Rendered Deployment excerpt (sanity check):"
+          awk '
+            $0 ~ /^kind: Deployment$/ {in_dep=1}
+            in_dep {print}
+            in_dep && $0 ~ /^---$/ {exit}
+          ' /tmp/kustomize-rendered.yaml | grep -E "kind: Deployment|name: oauth2-server|replicas:|initContainers:|OAUTH2_DATABASE_URL|volumeMounts:|mountPath: /app/data|volumes:|emptyDir" || true
+
+          kubectl apply -f /tmp/kustomize-rendered.yaml
+
+          # Ensure migration job is fresh and uses the latest configmap
+          kubectl delete job flyway-migration -n oauth2-server --ignore-not-found
+          kubectl apply -f k8s/base/flyway-migration-job.yaml
+
+          echo "Waiting for Postgres to become ready..."
+          kubectl wait --for=condition=ready pod -l app=postgres -n oauth2-server --timeout=120s
+
+          echo "Waiting for Flyway migration job to complete..."
+          if ! kubectl wait --for=condition=complete job/flyway-migration -n oauth2-server --timeout=300s; then
+            echo "Flyway migration job did not complete in time. Dumping diagnostics..."
+
+            kubectl get job flyway-migration -n oauth2-server -o wide || true
+            kubectl describe job flyway-migration -n oauth2-server || true
+            kubectl get pods -n oauth2-server -l job-name=flyway-migration -o wide || true
+
+            pods=$(kubectl get pods -n oauth2-server -l job-name=flyway-migration -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+            for pod in $pods; do
+              echo "--- describe pod/$pod"
+              kubectl describe pod "$pod" -n oauth2-server || true
+              echo "--- logs pod/$pod (init: wait-for-postgres)"
+              kubectl logs "$pod" -n oauth2-server -c wait-for-postgres --tail=200 || true
+              echo "--- logs pod/$pod (container: flyway)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --tail=400 || true
+              echo "--- logs pod/$pod (container: flyway, previous)"
+              kubectl logs "$pod" -n oauth2-server -c flyway --previous --tail=400 || true
+            done
+
+            exit 1
+          fi
+
+      - name: Wait for OAuth2 server
+        run: |
+          echo "Waiting for deployment to be ready..."
+          kubectl rollout status deployment/oauth2-server -n oauth2-server --timeout=180s
+
+      - name: Check deployment status
+        run: |
+          kubectl get all -n oauth2-server
+          kubectl describe deployment oauth2-server -n oauth2-server
+
+      - name: Check server logs
+        if: always()
+        run: |
+          kubectl logs deployment/oauth2-server -n oauth2-server -c oauth2-server --tail=100 || echo "No logs available yet"
+
+      - name: Test health endpoint
+        run: |
+          sleep 10
+          curl -f http://localhost:8080/health || (kubectl logs deployment/oauth2-server -n oauth2-server && exit 1)
+
+      - name: Test readiness endpoint
+        run: |
+          curl -f http://localhost:8080/ready
+
+      - name: Test OpenID configuration
+        run: |
+          curl -f http://localhost:8080/.well-known/openid-configuration
+
+      - name: Register test client
+        run: |
+          response=$(curl -X POST http://localhost:8080/clients/register \
+            -H "Content-Type: application/json" \
+            -d '{
+              "client_name": "Test Client",
+              "redirect_uris": ["http://localhost:3000/callback"],
+              "grant_types": ["client_credentials"],
+              "scope": "read write"
+            }')
+          echo "Client registration response: $response"
+          echo "$response" > /tmp/client.json
+
+      - name: Get access token
+        run: |
+          client_id=$(cat /tmp/client.json | jq -r '.client_id')
+          client_secret=$(cat /tmp/client.json | jq -r '.client_secret')
+          
+          token_response=$(curl -X POST http://localhost:8080/oauth/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret&scope=read")
+          
+          echo "Token response: $token_response"
+          access_token=$(echo "$token_response" | jq -r '.access_token')
+          if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+            echo "Failed to obtain access token"
+            exit 1
+          fi
+          echo "$access_token" > /tmp/token.txt
+
+      - name: Introspect token
+        run: |
+          client_id=$(cat /tmp/client.json | jq -r '.client_id')
+          client_secret=$(cat /tmp/client.json | jq -r '.client_secret')
+          token=$(cat /tmp/token.txt)
+          
+          introspect_response=$(curl -X POST http://localhost:8080/oauth/introspect \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "token=$token&client_id=$client_id&client_secret=$client_secret")
+          
+          echo "Introspection response: $introspect_response"
+          
+          # Verify token is active
+          active=$(echo "$introspect_response" | jq -r '.active')
+          if [ "$active" != "true" ]; then
+            echo "Token is not active!"
+            kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 || true
+            kubectl get pods -n oauth2-server -o wide || true
+            exit 1
+          fi
+
+      - name: Test metrics endpoint
+        run: |
+          curl -f http://localhost:8080/metrics | head -20
+
+      - name: Export cluster logs
+        if: failure()
+        run: |
+          kubectl logs deployment/oauth2-server -n oauth2-server --tail=200 > oauth2-server.log || echo "No oauth2-server logs"
+          kubectl describe pods -n oauth2-server > pods-describe.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-cluster-logs
+          path: |
+            oauth2-server.log
+            pods-describe.log
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kubectl delete namespace oauth2-server || true
 
   # Docker Build
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [quality, security, build-and-test]
+    needs: [ci, security, integration, e2e-kind]
     if: github.event_name == 'push'
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download prebuilt server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rust_oauth2_server-linux-amd64
+          path: target/release
+
+      - name: Ensure binary is executable
+        run: chmod +x target/release/rust_oauth2_server
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: |
+            docker.io/${{ secrets.DOCKER_USERNAME }}/oauth2-server
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -208,6 +488,7 @@ jobs:
         with:
           context: .
           push: true
+          file: Dockerfile.prebuilt
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -228,8 +509,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Rust toolchain + cache
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: stable
+          cache-key: docs
+          install-system-deps: 'true'
 
       - name: Build Rust Docs
         run: cargo doc --no-deps --all-features
@@ -238,6 +523,14 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/mkdocs.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install MkDocs
         run: |
@@ -274,7 +567,7 @@ jobs:
   gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [quality, security, build-and-test, coverage]
+    needs: [ci, security, integration, e2e-kind, coverage]
     if: always()
     steps:
       - name: Check Job Results
@@ -283,10 +576,16 @@ jobs:
           if [ "${{ needs.security.result }}" != "success" ]; then
             echo "⚠️  Security scan found issues (informational only)"
           fi
+
+          # Coverage is informational and may be skipped
+          if [ "${{ needs.coverage.result }}" = "failure" ]; then
+            echo "⚠️  Coverage job failed (informational only)"
+          fi
           
           # Only fail on critical job failures
-          if [ "${{ needs.quality.result }}" != "success" ] || \
-             [ "${{ needs.build-and-test.result }}" != "success" ]; then
+          if [ "${{ needs.ci.result }}" != "success" ] || \
+             [ "${{ needs.integration.result }}" != "success" ] || \
+             [ "${{ needs.e2e-kind.result }}" != "success" ]; then
             echo "Quality gate failed!"
             exit 1
           fi

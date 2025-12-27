@@ -13,13 +13,15 @@ resources:
   - postgres-statefulset.yaml
   - postgres-service.yaml
   - flyway-migration-job.yaml
+  - ingress.yaml
+  - hpa.yaml
   - deployment.yaml
   - service.yaml
   - service-nodeport.yaml
 
 images:
-  - name: ghcr.io/ianlintner/rust_oauth2_server
-    newTag: test
+  - name: docker.io/ianlintner068/oauth2-server
+    newTag: latest
 
 commonLabels:
   app.kubernetes.io/name: oauth2-server
