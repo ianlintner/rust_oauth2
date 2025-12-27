@@ -1,6 +1,7 @@
-use sqlx::{postgres::PgPoolOptions, Executor, Postgres};
-use std::time::Duration;
-use testcontainers::{clients::Cli, images::postgres::Postgres as TcPostgres};
+use sqlx::{postgres::PgPoolOptions, Executor};
+use std::{fs, path::PathBuf, time::Duration};
+use testcontainers::clients::Cli;
+use testcontainers_modules::postgres::Postgres as TcPostgres;
 
 // This test spins up a disposable Postgres via Testcontainers, applies our SQLx migrations,
 // and verifies the schema is valid. Skips automatically unless RUN_TESTCONTAINERS=1 is set
@@ -20,11 +21,13 @@ async fn migrations_apply_successfully_on_postgres() -> Result<(), Box<dyn std::
     // Wait for Postgres to accept connections
     let pool = {
         let mut last_err = None;
+        let mut last_pool = None;
+
         for _ in 0..20 {
             match PgPoolOptions::new().max_connections(5).connect(&url).await {
                 Ok(pool) => {
-                    last_err = None;
-                    break pool;
+                    last_pool = Some(pool);
+                    break;
                 }
                 Err(e) => {
                     last_err = Some(e);
@@ -32,13 +35,25 @@ async fn migrations_apply_successfully_on_postgres() -> Result<(), Box<dyn std::
                 }
             }
         }
-        .ok_or_else(|| {
+
+        last_pool.ok_or_else(|| {
             last_err.unwrap_or_else(|| sqlx::Error::Configuration("unknown error".into()))
         })?
     };
 
-    // Apply migrations from the repository
-    sqlx::migrate!("./migrations/sql").run(&pool).await?;
+    // Apply Flyway-style migrations manually to avoid sqlx filename parsing expectations
+    let mut entries: Vec<PathBuf> = fs::read_dir("./migrations/sql")?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("sql"))
+        .collect();
+
+    entries.sort();
+
+    for path in entries {
+        let sql = fs::read_to_string(&path)?;
+        pool.execute(sql.as_str()).await?;
+    }
 
     // Simple sanity check
     pool.execute("SELECT 1").await?;

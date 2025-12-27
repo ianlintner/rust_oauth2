@@ -97,6 +97,7 @@ actix-rt = "2.9"
 cucumber = { version = "0.20", features = ["macros"] }
 futures = "0.3"
 testcontainers = "0.15"
+testcontainers-modules = { version = "0.3", features = ["postgres"] }
 
 [[test]]
 name = "bdd"
