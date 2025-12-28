@@ -68,6 +68,7 @@ impl EventEnvelope {
         Self::from_span(event, &Span::current(), producer)
     }
 
+    #[allow(dead_code)]
     pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.attributes.insert(key.into(), value.into());
         self

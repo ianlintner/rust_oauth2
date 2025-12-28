@@ -4,8 +4,11 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum EventBusError {
+    #[allow(dead_code)]
     Unavailable,
+    #[allow(dead_code)]
     Rejected(String),
+    #[allow(dead_code)]
     Other(String),
 }
 

@@ -81,9 +81,15 @@ impl EventPlugin for RedisStreamsEventPublisher {
     }
 
     async fn health_check(&self) -> bool {
-        let mut conn = self.conn.lock().await;
-        let ping: redis::RedisResult<String> = redis::cmd("PING").query_async(&mut *conn).await;
-        ping.is_ok()
+        let fut = async {
+            let mut conn = self.conn.lock().await;
+            redis::cmd("PING").query_async::<_, String>(&mut *conn).await
+        };
+
+        matches!(
+            tokio::time::timeout(default_healthcheck_timeout(), fut).await,
+            Ok(Ok(_))
+        )
     }
 }
 

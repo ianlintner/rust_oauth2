@@ -211,7 +211,7 @@ async fn main() -> std::io::Result<()> {
                     let maxlen = config
                         .events
                         .redis_maxlen
-                        .or_else(|| events::default_maxlen());
+                        .or_else(events::default_maxlen);
 
                     match events::RedisStreamsEventPublisher::connect(&url, stream, maxlen).await {
                         Ok(p) => vec![Arc::new(p)],
@@ -325,7 +325,9 @@ async fn main() -> std::io::Result<()> {
     });
 
     // Best-effort Phase 1 in-memory idempotency cache for ingest.
-    let ingest_idempotency = handlers::events::IdempotencyStore::new(Duration::from_secs(5 * 60));
+    let ingest_idempotency = handlers::events::IdempotencyStore::new(Duration::from_secs(5 * 60))
+        // Explicitly set to default to make it configurable without changing call sites.
+        .with_max_entries(100_000);
 
     // Start actors with event system
     let token_actor = if let Some(ref event_bus) = event_bus {

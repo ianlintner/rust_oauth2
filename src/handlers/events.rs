@@ -95,7 +95,7 @@ pub async fn ingest(
 
     let mut envelope = envelope.into_inner();
     if let Some(k) = header_idempotency_key {
-        envelope.idempotency_key = Some(k);
+        envelope = envelope.with_idempotency_key(k);
     }
 
     let effective_key = envelope.effective_idempotency_key();

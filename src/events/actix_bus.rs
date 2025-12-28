@@ -21,6 +21,7 @@ impl ActixEventBus {
         Self { addr }
     }
 
+    #[allow(dead_code)]
     pub fn addr(&self) -> &Addr<EventActor> {
         &self.addr
     }
