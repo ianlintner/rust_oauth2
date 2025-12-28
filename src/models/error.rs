@@ -72,6 +72,25 @@ impl ResponseError for OAuth2Error {
 
 impl From<sqlx::Error> for OAuth2Error {
     fn from(err: sqlx::Error) -> Self {
+        // Provide a stable, non-leaky mapping for common constraint violations.
+        // This is especially useful for backend parity tests (SQLx vs Mongo).
+        if let sqlx::Error::Database(db_err) = &err {
+            let code = db_err.code().unwrap_or_default();
+            let msg = db_err.message();
+
+            // Postgres unique violation: 23505
+            // SQLite constraint error codes vary by extended code; also match by message.
+            let is_unique = code == "23505"
+                || code == "2067"
+                || code == "1555"
+                || msg.contains("UNIQUE constraint failed")
+                || msg.contains("duplicate key");
+
+            if is_unique {
+                return Self::invalid_request("duplicate key");
+            }
+        }
+
         Self::new("server_error", Some(&err.to_string()))
     }
 }

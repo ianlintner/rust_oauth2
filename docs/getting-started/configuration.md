@@ -17,7 +17,7 @@ All configuration options can be set via environment variables with the `OAUTH2_
 ### Server Configuration
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_SERVER_HOST` | String | `127.0.0.1` | Server bind address |
 | `OAUTH2_SERVER_PORT` | Integer | `8080` | Server port |
 | `OAUTH2_SERVER_WORKERS` | Integer | CPU cores | Number of worker threads |
@@ -33,7 +33,7 @@ export OAUTH2_SERVER_WORKERS=4
 ### Database Configuration
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_DATABASE_URL` | String | `sqlite:oauth2.db` | Database connection URL |
 | `OAUTH2_DATABASE_MAX_CONNECTIONS` | Integer | `10` | Maximum database connections |
 | `OAUTH2_DATABASE_MIN_CONNECTIONS` | Integer | `1` | Minimum database connections |
@@ -55,10 +55,24 @@ export OAUTH2_SERVER_WORKERS=4
     export OAUTH2_DATABASE_URL=postgresql://username:password@localhost:5432/oauth2_db?sslmode=require
     ```
 
+=== "MongoDB (optional)"
+    MongoDB support is available behind a cargo feature flag to keep the default build lightweight.
+
+    - Build/run with: `--features mongo`
+    - Use a MongoDB connection URL (`mongodb://` or `mongodb+srv://`)
+
+    ```bash
+    # Local MongoDB
+    export OAUTH2_DATABASE_URL=mongodb://localhost:27017/oauth2
+
+    # MongoDB Atlas (SRV)
+    export OAUTH2_DATABASE_URL=mongodb+srv://user:pass@cluster0.example.mongodb.net/oauth2
+    ```
+
 ### JWT Configuration
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_JWT_SECRET` | String | **Required** | Secret key for signing JWT tokens |
 | `OAUTH2_JWT_ALGORITHM` | String | `HS256` | JWT signing algorithm |
 | `OAUTH2_JWT_ISSUER` | String | `rust_oauth2_server` | Token issuer identifier |
@@ -89,7 +103,7 @@ export OAUTH2_JWT_SECRET="a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
 ### Token Expiration
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_ACCESS_TOKEN_EXPIRATION` | Integer | `3600` | Access token lifetime (seconds) |
 | `OAUTH2_REFRESH_TOKEN_EXPIRATION` | Integer | `2592000` | Refresh token lifetime (seconds, 30 days) |
 | `OAUTH2_AUTHORIZATION_CODE_EXPIRATION` | Integer | `600` | Authorization code lifetime (seconds, 10 minutes) |
@@ -110,7 +124,7 @@ export OAUTH2_AUTHORIZATION_CODE_EXPIRATION=600
 ### Session Configuration
 
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_SESSION_KEY` | String | Auto-generated | Session encryption key (min 64 chars) |
 | `OAUTH2_SESSION_TIMEOUT` | Integer | `3600` | Session timeout (seconds) |
 | `OAUTH2_SESSION_SECURE` | Boolean | `false` | Require HTTPS for cookies |
@@ -131,7 +145,7 @@ export OAUTH2_SESSION_SECURE=true
 #### Google OAuth2
 
 | Variable | Type | Required | Description |
-|----------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_GOOGLE_CLIENT_ID` | String | Yes | Google OAuth2 client ID |
 | `OAUTH2_GOOGLE_CLIENT_SECRET` | String | Yes | Google OAuth2 client secret |
 | `OAUTH2_GOOGLE_REDIRECT_URI` | String | Yes | Callback URL for Google |
@@ -139,7 +153,7 @@ export OAUTH2_SESSION_SECURE=true
 #### Microsoft/Azure AD
 
 | Variable | Type | Required | Description |
-|----------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_MICROSOFT_CLIENT_ID` | String | Yes | Microsoft client ID |
 | `OAUTH2_MICROSOFT_CLIENT_SECRET` | String | Yes | Microsoft client secret |
 | `OAUTH2_MICROSOFT_REDIRECT_URI` | String | Yes | Callback URL for Microsoft |
@@ -148,7 +162,7 @@ export OAUTH2_SESSION_SECURE=true
 #### GitHub
 
 | Variable | Type | Required | Description |
-|----------|------|----------|-------------|
+| --- | --- | --- | --- |
 | `OAUTH2_GITHUB_CLIENT_ID` | String | Yes | GitHub OAuth app client ID |
 | `OAUTH2_GITHUB_CLIENT_SECRET` | String | Yes | GitHub OAuth app client secret |
 | `OAUTH2_GITHUB_REDIRECT_URI` | String | Yes | Callback URL for GitHub |

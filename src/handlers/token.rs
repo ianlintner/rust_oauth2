@@ -29,6 +29,7 @@ pub async fn introspect(
     let token_result = token_actor
         .send(ValidateToken {
             token: form.token.clone(),
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))?;
@@ -96,6 +97,7 @@ pub async fn revoke(
     token_actor
         .send(RevokeToken {
             token: form.token.clone(),
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;

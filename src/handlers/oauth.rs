@@ -36,6 +36,7 @@ pub async fn authorize(
             scope,
             code_challenge: query.code_challenge.clone(),
             code_challenge_method: query.code_challenge_method.clone(),
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
@@ -108,6 +109,7 @@ async fn handle_authorization_code_grant(
             client_id: req.client_id.clone(),
             redirect_uri,
             code_verifier: req.code_verifier,
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
@@ -119,6 +121,7 @@ async fn handle_authorization_code_grant(
             client_id: auth_code.client_id,
             scope: auth_code.scope,
             include_refresh: true,
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
@@ -144,6 +147,7 @@ async fn handle_client_credentials_grant(
             client_id: req.client_id,
             scope,
             include_refresh: false,
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
@@ -171,6 +175,7 @@ async fn handle_password_grant(
             client_id: req.client_id,
             scope,
             include_refresh: true,
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;

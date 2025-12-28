@@ -11,6 +11,7 @@ pub async fn register_client(
     let client = client_actor
         .send(RegisterClient {
             registration: registration.into_inner(),
+            span: tracing::Span::current(),
         })
         .await
         .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
