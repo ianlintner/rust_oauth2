@@ -71,6 +71,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-opentelemetry = "0.22"
 tracing-actix-web = "0.7"
+tracing-log = "0.2"
 
 # Async utilities
 futures = "0.3"

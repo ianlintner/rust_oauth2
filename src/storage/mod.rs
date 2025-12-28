@@ -5,6 +5,8 @@ use crate::models::{AuthorizationCode, Client, OAuth2Error, Token, User};
 
 pub mod sqlx;
 
+mod observed;
+
 #[cfg(feature = "mongo")]
 pub mod mongo;
 
@@ -70,7 +72,9 @@ pub async fn create_storage(database_url: &str) -> Result<DynStorage, OAuth2Erro
         #[cfg(feature = "mongo")]
         {
             let storage = mongo::MongoStorage::new(database_url).await?;
-            return Ok(Arc::new(storage));
+            let inner: DynStorage = Arc::new(storage);
+            let observed = observed::ObservedStorage::new(inner, "mongodb".to_string());
+            return Ok(Arc::new(observed));
         }
 
         #[cfg(not(feature = "mongo"))]
@@ -84,5 +88,16 @@ pub async fn create_storage(database_url: &str) -> Result<DynStorage, OAuth2Erro
 
     // Default to SQLx backend for sqlite/postgres.
     let storage = sqlx::SqlxStorage::new(database_url).await?;
-    Ok(Arc::new(storage))
+    let db_system =
+        if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
+            "postgresql"
+        } else if database_url.starts_with("sqlite:") || database_url.starts_with("sqlite://") {
+            "sqlite"
+        } else {
+            "sql"
+        };
+
+    let inner: DynStorage = Arc::new(storage);
+    let observed = observed::ObservedStorage::new(inner, db_system.to_string());
+    Ok(Arc::new(observed))
 }

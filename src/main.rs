@@ -14,11 +14,33 @@ use actix::Actor;
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
+use actix_web::body::MessageBody;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{cookie::Key, middleware as actix_middleware, web, App, HttpResponse, HttpServer};
 use std::sync::Arc;
-use tracing_actix_web::TracingLogger;
+use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder, TracingLogger};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(Clone, Copy)]
+struct OtelRootSpanBuilder;
+
+impl RootSpanBuilder for OtelRootSpanBuilder {
+    fn on_request_start(request: &ServiceRequest) -> tracing::Span {
+        // Build the default root span and declare a `span_id` field up-front.
+        // We then populate both trace_id and span_id using the active OpenTelemetry context.
+        let span = tracing_actix_web::root_span!(request, span_id = tracing::field::Empty);
+        telemetry::annotate_span_with_trace_ids(&span);
+        span
+    }
+
+    fn on_request_end<B: MessageBody>(
+        span: tracing::Span,
+        outcome: &Result<ServiceResponse<B>, actix_web::Error>,
+    ) {
+        DefaultRootSpanBuilder::on_request_end(span, outcome);
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -233,7 +255,7 @@ async fn main() -> std::io::Result<()> {
                 CookieSessionStore::default(),
                 session_key.clone(),
             ))
-            .wrap(TracingLogger::default())
+            .wrap(TracingLogger::<OtelRootSpanBuilder>::new())
             .wrap(actix_middleware::Logger::default())
             .wrap(actix_middleware::Compress::default())
             .wrap(middleware::MetricsMiddleware::new(metrics.clone()))

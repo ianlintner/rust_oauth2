@@ -6,6 +6,7 @@ use crate::models::{AuthorizationCode, OAuth2Error};
 use crate::storage::DynStorage;
 use actix::prelude::*;
 use rand::Rng;
+use tracing::Instrument;
 
 pub struct AuthActor {
     db: DynStorage,
@@ -41,6 +42,7 @@ pub struct CreateAuthorizationCode {
     pub scope: String,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
+    pub span: tracing::Span,
 }
 
 impl Handler<CreateAuthorizationCode> for AuthActor {
@@ -50,36 +52,50 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
         let db = self.db.clone();
         let event_actor = self.event_actor.clone();
 
-        Box::pin(async move {
-            let code = generate_code();
-            let auth_code = AuthorizationCode::new(
-                code,
-                msg.client_id.clone(),
-                msg.user_id.clone(),
-                msg.redirect_uri.clone(),
-                msg.scope.clone(),
-                msg.code_challenge,
-                msg.code_challenge_method,
-            );
+        let parent_span = msg.span.clone();
+        let actor_span = tracing::info_span!(
+            parent: &parent_span,
+            "actor.auth.create_authorization_code",
+            trace_id = tracing::field::Empty,
+            span_id = tracing::field::Empty,
+            client_id = %msg.client_id,
+            user_id = %msg.user_id
+        );
+        crate::telemetry::annotate_span_with_trace_ids(&actor_span);
 
-            db.save_authorization_code(&auth_code).await?;
+        Box::pin(
+            async move {
+                let code = generate_code();
+                let auth_code = AuthorizationCode::new(
+                    code,
+                    msg.client_id.clone(),
+                    msg.user_id.clone(),
+                    msg.redirect_uri.clone(),
+                    msg.scope.clone(),
+                    msg.code_challenge,
+                    msg.code_challenge_method,
+                );
 
-            // Emit event
-            if let Some(event_actor) = event_actor {
-                let event = AuthEvent::new(
-                    EventType::AuthorizationCodeCreated,
-                    EventSeverity::Info,
-                    Some(msg.user_id.clone()),
-                    Some(msg.client_id.clone()),
-                )
-                .with_metadata("scope", msg.scope)
-                .with_metadata("redirect_uri", msg.redirect_uri);
+                db.save_authorization_code(&auth_code).await?;
 
-                event_actor.do_send(EmitEvent { event });
+                // Emit event
+                if let Some(event_actor) = event_actor {
+                    let event = AuthEvent::new(
+                        EventType::AuthorizationCodeCreated,
+                        EventSeverity::Info,
+                        Some(msg.user_id.clone()),
+                        Some(msg.client_id.clone()),
+                    )
+                    .with_metadata("scope", msg.scope)
+                    .with_metadata("redirect_uri", msg.redirect_uri);
+
+                    event_actor.do_send(EmitEvent { event });
+                }
+
+                Ok(auth_code)
             }
-
-            Ok(auth_code)
-        })
+            .instrument(actor_span),
+        )
     }
 }
 
@@ -90,6 +106,7 @@ pub struct ValidateAuthorizationCode {
     pub client_id: String,
     pub redirect_uri: String,
     pub code_verifier: Option<String>,
+    pub span: tracing::Span,
 }
 
 impl Handler<ValidateAuthorizationCode> for AuthActor {
@@ -99,68 +116,84 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
         let db = self.db.clone();
         let event_actor = self.event_actor.clone();
 
-        Box::pin(async move {
-            let auth_code = db
-                .get_authorization_code(&msg.code)
-                .await?
-                .ok_or_else(|| OAuth2Error::invalid_grant("Authorization code not found"))?;
+        let parent_span = msg.span.clone();
+        let code_prefix = msg.code.chars().take(12).collect::<String>();
+        let actor_span = tracing::info_span!(
+            parent: &parent_span,
+            "actor.auth.validate_authorization_code",
+            trace_id = tracing::field::Empty,
+            span_id = tracing::field::Empty,
+            client_id = %msg.client_id,
+            code_prefix = %code_prefix,
+            code_len = msg.code.len()
+        );
+        crate::telemetry::annotate_span_with_trace_ids(&actor_span);
 
-            if !auth_code.is_valid() {
-                // Emit expired event
-                if let Some(event_actor) = &event_actor {
+        Box::pin(
+            async move {
+                let auth_code = db
+                    .get_authorization_code(&msg.code)
+                    .await?
+                    .ok_or_else(|| OAuth2Error::invalid_grant("Authorization code not found"))?;
+
+                if !auth_code.is_valid() {
+                    // Emit expired event
+                    if let Some(event_actor) = &event_actor {
+                        let event = AuthEvent::new(
+                            EventType::AuthorizationCodeExpired,
+                            EventSeverity::Warning,
+                            Some(auth_code.user_id.clone()),
+                            Some(auth_code.client_id.clone()),
+                        );
+                        event_actor.do_send(EmitEvent { event });
+                    }
+
+                    return Err(OAuth2Error::invalid_grant(
+                        "Authorization code is expired or used",
+                    ));
+                }
+
+                if auth_code.client_id != msg.client_id {
+                    return Err(OAuth2Error::invalid_grant("Client ID mismatch"));
+                }
+
+                if auth_code.redirect_uri != msg.redirect_uri {
+                    return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
+                }
+
+                // Validate PKCE if present
+                if let Some(challenge) = &auth_code.code_challenge {
+                    let verifier = msg
+                        .code_verifier
+                        .ok_or_else(|| OAuth2Error::invalid_grant("Code verifier required"))?;
+
+                    let method = auth_code
+                        .code_challenge_method
+                        .as_deref()
+                        .unwrap_or("plain");
+                    if !validate_pkce(challenge, &verifier, method) {
+                        return Err(OAuth2Error::invalid_grant("Invalid code verifier"));
+                    }
+                }
+
+                // Mark as used
+                db.mark_authorization_code_used(&msg.code).await?;
+
+                // Emit validated event
+                if let Some(event_actor) = event_actor {
                     let event = AuthEvent::new(
-                        EventType::AuthorizationCodeExpired,
-                        EventSeverity::Warning,
+                        EventType::AuthorizationCodeValidated,
+                        EventSeverity::Info,
                         Some(auth_code.user_id.clone()),
                         Some(auth_code.client_id.clone()),
                     );
                     event_actor.do_send(EmitEvent { event });
                 }
 
-                return Err(OAuth2Error::invalid_grant(
-                    "Authorization code is expired or used",
-                ));
+                Ok(auth_code)
             }
-
-            if auth_code.client_id != msg.client_id {
-                return Err(OAuth2Error::invalid_grant("Client ID mismatch"));
-            }
-
-            if auth_code.redirect_uri != msg.redirect_uri {
-                return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
-            }
-
-            // Validate PKCE if present
-            if let Some(challenge) = &auth_code.code_challenge {
-                let verifier = msg
-                    .code_verifier
-                    .ok_or_else(|| OAuth2Error::invalid_grant("Code verifier required"))?;
-
-                let method = auth_code
-                    .code_challenge_method
-                    .as_deref()
-                    .unwrap_or("plain");
-                if !validate_pkce(challenge, &verifier, method) {
-                    return Err(OAuth2Error::invalid_grant("Invalid code verifier"));
-                }
-            }
-
-            // Mark as used
-            db.mark_authorization_code_used(&msg.code).await?;
-
-            // Emit validated event
-            if let Some(event_actor) = event_actor {
-                let event = AuthEvent::new(
-                    EventType::AuthorizationCodeValidated,
-                    EventSeverity::Info,
-                    Some(auth_code.user_id.clone()),
-                    Some(auth_code.client_id.clone()),
-                );
-                event_actor.do_send(EmitEvent { event });
-            }
-
-            Ok(auth_code)
-        })
+            .instrument(actor_span),
+        )
     }
 }
 
