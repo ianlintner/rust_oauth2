@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::models::{AuthorizationCode, Client, OAuth2Error, Token, User};
 use async_trait::async_trait;
 use sqlx::{Pool, Postgres, Sqlite};
@@ -191,6 +189,20 @@ impl SqlxStorage {
 impl Storage for SqlxStorage {
     async fn init(&self) -> Result<(), OAuth2Error> {
         self.init_sqlx().await.map_err(Into::into)
+    }
+
+    async fn healthcheck(&self) -> Result<(), OAuth2Error> {
+        // Keep readiness/liveness cheap: don't run bootstrap or migrations.
+        match &self.pool {
+            DatabasePool::Sqlite(pool) => {
+                sqlx::query("SELECT 1").execute(pool).await?;
+            }
+            DatabasePool::Postgres(pool) => {
+                sqlx::query("SELECT 1").execute(pool).await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn save_client(&self, client: &Client) -> Result<(), OAuth2Error> {

@@ -12,7 +12,6 @@ pub mod mongo;
 ///
 /// This is intentionally small and mirrors the operations currently used by actors/handlers.
 #[async_trait]
-#[allow(dead_code)]
 pub trait Storage: Send + Sync {
     /// Initialize the backing store (e.g., bootstrap schema / create indexes).
     async fn init(&self) -> Result<(), OAuth2Error>;
@@ -22,7 +21,12 @@ pub trait Storage: Send + Sync {
     async fn get_client(&self, client_id: &str) -> Result<Option<Client>, OAuth2Error>;
 
     // User operations
+    // NOTE: These methods are implemented by all backends and covered by contract tests,
+    // but the current HTTP flows don't yet wire in real user persistence.
+    // Keep them on the trait for forward-compatibility without breaking CI (-D warnings).
+    #[allow(dead_code)]
     async fn save_user(&self, user: &User) -> Result<(), OAuth2Error>;
+    #[allow(dead_code)]
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, OAuth2Error>;
 
     // Token operations

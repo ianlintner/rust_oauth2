@@ -3689,6 +3689,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "subtle",
+ "tempfile",
  "tera",
  "testcontainers",
  "testcontainers-modules",

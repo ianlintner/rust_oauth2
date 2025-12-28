@@ -138,7 +138,7 @@ impl MongoStorage {
 
     fn mongo_err_to_oauth(err: mongodb::error::Error) -> OAuth2Error {
         if Self::duplicate_key_error(&err) {
-            return OAuth2Error::new("server_error", Some("duplicate key"));
+            return OAuth2Error::invalid_request("duplicate key");
         }
 
         OAuth2Error::new("server_error", Some(&err.to_string()))
