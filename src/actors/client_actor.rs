@@ -1,7 +1,4 @@
-use crate::events::{
-    event_actor::{EmitEvent, EventActor},
-    AuthEvent, EventSeverity, EventType,
-};
+use crate::events::{AuthEvent, EventBusHandle, EventEnvelope, EventSeverity, EventType};
 use crate::models::{Client, ClientRegistration, OAuth2Error};
 use crate::storage::DynStorage;
 use actix::prelude::*;
@@ -10,21 +7,21 @@ use tracing::Instrument;
 
 pub struct ClientActor {
     db: DynStorage,
-    event_actor: Option<Addr<EventActor>>,
+    event_bus: Option<EventBusHandle>,
 }
 
 impl ClientActor {
     pub fn new(db: DynStorage) -> Self {
         Self {
             db,
-            event_actor: None,
+            event_bus: None,
         }
     }
 
-    pub fn with_events(db: DynStorage, event_actor: Addr<EventActor>) -> Self {
+    pub fn with_events(db: DynStorage, event_bus: EventBusHandle) -> Self {
         Self {
             db,
-            event_actor: Some(event_actor),
+            event_bus: Some(event_bus),
         }
     }
 }
@@ -45,7 +42,7 @@ impl Handler<RegisterClient> for ClientActor {
 
     fn handle(&mut self, msg: RegisterClient, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let actor_span = tracing::info_span!(
@@ -76,7 +73,7 @@ impl Handler<RegisterClient> for ClientActor {
                 db.save_client(&client).await?;
 
                 // Emit event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::ClientRegistered,
                         EventSeverity::Info,
@@ -86,7 +83,8 @@ impl Handler<RegisterClient> for ClientActor {
                     .with_metadata("client_name", msg.registration.client_name)
                     .with_metadata("scope", msg.registration.scope);
 
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(client)
@@ -143,7 +141,7 @@ impl Handler<ValidateClient> for ClientActor {
 
     fn handle(&mut self, msg: ValidateClient, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let actor_span = tracing::info_span!(
@@ -171,7 +169,7 @@ impl Handler<ValidateClient> for ClientActor {
                     .into();
 
                 // Emit event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::ClientValidated,
                         EventSeverity::Info,
@@ -180,7 +178,8 @@ impl Handler<ValidateClient> for ClientActor {
                     )
                     .with_metadata("success", if secret_match { "true" } else { "false" });
 
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(secret_match)

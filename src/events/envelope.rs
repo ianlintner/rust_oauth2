@@ -16,6 +16,14 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 pub struct EventEnvelope {
     pub event: AuthEvent,
 
+    /// Optional idempotency key for deduplicating retries.
+    ///
+    /// Best practice:
+    /// - External producers SHOULD send an `Idempotency-Key` header.
+    /// - If omitted, the server will fall back to `event.id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+
     /// W3C trace context header value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub traceparent: Option<String>,
@@ -45,6 +53,7 @@ impl EventEnvelope {
 
         Self {
             event,
+            idempotency_key: None,
             traceparent,
             tracestate,
             correlation_id: uuid::Uuid::new_v4().to_string(),
@@ -62,6 +71,23 @@ impl EventEnvelope {
     pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.attributes.insert(key.into(), value.into());
         self
+    }
+
+    pub fn with_idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
+    }
+
+    /// Resolve the effective idempotency key.
+    ///
+    /// Priority:
+    /// 1) `idempotency_key` (explicit)
+    /// 2) `event.id` (always present)
+    pub fn effective_idempotency_key(&self) -> String {
+        self.idempotency_key
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| self.event.id.clone())
     }
 }
 
@@ -116,5 +142,32 @@ mod tests {
         assert_eq!(decoded.producer, "test");
         assert!(!decoded.correlation_id.is_empty());
         assert_eq!(decoded.event.event_type, EventType::TokenCreated);
+    }
+
+    #[test]
+    fn effective_idempotency_key_defaults_to_event_id() {
+        let event = AuthEvent::new(
+            EventType::TokenCreated,
+            EventSeverity::Info,
+            Some("u".to_string()),
+            Some("c".to_string()),
+        );
+        let event_id = event.id.clone();
+
+        let env = EventEnvelope::from_current_span(event, "test");
+        assert_eq!(env.effective_idempotency_key(), event_id);
+    }
+
+    #[test]
+    fn effective_idempotency_key_prefers_explicit_key() {
+        let event = AuthEvent::new(
+            EventType::TokenCreated,
+            EventSeverity::Info,
+            Some("u".to_string()),
+            Some("c".to_string()),
+        );
+
+        let env = EventEnvelope::from_current_span(event, "test").with_idempotency_key("k1");
+        assert_eq!(env.effective_idempotency_key(), "k1");
     }
 }

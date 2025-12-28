@@ -18,6 +18,7 @@ use actix_web::body::MessageBody;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{cookie::Key, middleware as actix_middleware, web, App, HttpResponse, HttpServer};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder, TracingLogger};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -209,22 +210,31 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
+    // Wrap the actor-backed event system behind the stable EventBus contract.
+    let event_bus = event_actor.as_ref().map(|addr| {
+        let bus = events::ActixEventBus::new(addr.clone());
+        events::EventBusHandle::new(Arc::new(bus))
+    });
+
+    // Best-effort Phase 1 in-memory idempotency cache for ingest.
+    let ingest_idempotency = handlers::events::IdempotencyStore::new(Duration::from_secs(5 * 60));
+
     // Start actors with event system
-    let token_actor = if let Some(ref event_actor) = event_actor {
-        actors::TokenActor::with_events(storage.clone(), jwt_secret.clone(), event_actor.clone())
+    let token_actor = if let Some(ref event_bus) = event_bus {
+        actors::TokenActor::with_events(storage.clone(), jwt_secret.clone(), event_bus.clone())
             .start()
     } else {
         actors::TokenActor::new(storage.clone(), jwt_secret.clone()).start()
     };
 
-    let client_actor = if let Some(ref event_actor) = event_actor {
-        actors::ClientActor::with_events(storage.clone(), event_actor.clone()).start()
+    let client_actor = if let Some(ref event_bus) = event_bus {
+        actors::ClientActor::with_events(storage.clone(), event_bus.clone()).start()
     } else {
         actors::ClientActor::new(storage.clone()).start()
     };
 
-    let auth_actor = if let Some(ref event_actor) = event_actor {
-        actors::AuthActor::with_events(storage.clone(), event_actor.clone()).start()
+    let auth_actor = if let Some(ref event_bus) = event_bus {
+        actors::AuthActor::with_events(storage.clone(), event_bus.clone()).start()
     } else {
         actors::AuthActor::new(storage.clone()).start()
     };
@@ -269,9 +279,17 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(metrics.clone()))
             .app_data(web::Data::new(social_config.clone()));
 
+        // Shared, best-effort in-memory idempotency cache for event ingest.
+        app = app.app_data(web::Data::new(ingest_idempotency.clone()));
+
         // Add event actor if enabled
         if let Some(ref event_actor) = event_actor {
             app = app.app_data(web::Data::new(event_actor.clone()));
+        }
+
+        // Add event bus handle if enabled
+        if let Some(ref event_bus) = event_bus {
+            app = app.app_data(web::Data::new(event_bus.clone()));
         }
 
         app
@@ -361,6 +379,12 @@ async fn main() -> std::io::Result<()> {
             .route("/health", web::get().to(handlers::admin::health))
             .route("/ready", web::get().to(handlers::admin::readiness))
             .route("/metrics", web::get().to(handlers::admin::system_metrics))
+            // Eventing endpoints
+            .service(
+                web::scope("/events")
+                    .route("/ingest", web::post().to(handlers::events::ingest))
+                    .route("/health", web::get().to(handlers::events::health)),
+            )
             // Swagger UI
             .service(
                 SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
