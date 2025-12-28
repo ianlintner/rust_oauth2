@@ -54,7 +54,7 @@ graph TB
     style Redis fill:#e91e63,color:#fff
 ```
 
-## Security Configuration
+## Security Configuration {#security}
 
 ### 1. HTTPS/TLS
 
@@ -313,7 +313,7 @@ primary_conninfo = 'host=primary_ip port=5432 user=replicator password=pass'
 promote_trigger_file = '/tmp/promote_replica'
 ```
 
-## Performance Optimization
+## Performance Optimization {#performance}
 
 ### Server Configuration
 
