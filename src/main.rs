@@ -193,6 +193,111 @@ async fn main() -> std::io::Result<()> {
                 Arc::new(InMemoryEventLogger::new(1000)),
                 Arc::new(ConsoleEventLogger::new()),
             ],
+            "redis" | "redis_streams" => {
+                #[cfg(feature = "events-redis")]
+                {
+                    let url = config
+                        .events
+                        .redis_url
+                        .clone()
+                        .unwrap_or_else(|| "redis://127.0.0.1:6379".to_string());
+
+                    let stream = config
+                        .events
+                        .redis_stream
+                        .clone()
+                        .unwrap_or_else(events::default_stream_name);
+
+                    let maxlen = config.events.redis_maxlen.or_else(|| events::default_maxlen());
+
+                    match events::RedisStreamsEventPublisher::connect(&url, stream, maxlen).await {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Redis event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-redis"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-redis' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
+            "kafka" => {
+                #[cfg(feature = "events-kafka")]
+                {
+                    let brokers = config
+                        .events
+                        .kafka_brokers
+                        .clone()
+                        .unwrap_or_else(|| "127.0.0.1:9092".to_string());
+                    let topic = config
+                        .events
+                        .kafka_topic
+                        .clone()
+                        .unwrap_or_else(|| "oauth2_events".to_string());
+
+                    match events::KafkaEventPublisher::new(
+                        &brokers,
+                        topic,
+                        config.events.kafka_client_id.clone(),
+                    ) {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Kafka event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-kafka"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-kafka' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
+            "rabbit" | "rabbitmq" => {
+                #[cfg(feature = "events-rabbit")]
+                {
+                    let url = config
+                        .events
+                        .rabbit_url
+                        .clone()
+                        .unwrap_or_else(|| "amqp://127.0.0.1:5672/%2f".to_string());
+                    let exchange = config
+                        .events
+                        .rabbit_exchange
+                        .clone()
+                        .unwrap_or_else(|| "oauth2.events".to_string());
+                    let routing_key = config
+                        .events
+                        .rabbit_routing_key
+                        .clone()
+                        .unwrap_or_else(|| "oauth2.event".to_string());
+
+                    match events::RabbitEventPublisher::connect(&url, exchange, routing_key).await {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Rabbit event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-rabbit"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-rabbit' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
             _ => {
                 tracing::warn!(
                     "Unknown event backend: {}, using in_memory",

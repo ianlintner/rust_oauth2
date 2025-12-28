@@ -1,7 +1,6 @@
 use crate::events::{EventEnvelope, EventPlugin};
 use async_trait::async_trait;
 use redis::aio::ConnectionManager;
-use redis::AsyncCommands;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
@@ -22,7 +21,7 @@ impl RedisStreamsEventPublisher {
     ) -> Result<Self, String> {
         let client = redis::Client::open(url).map_err(|e| format!("redis client: {e}"))?;
         let conn = client
-            .get_tokio_connection_manager()
+            .get_connection_manager()
             .await
             .map_err(|e| format!("redis connect: {e}"))?;
 
