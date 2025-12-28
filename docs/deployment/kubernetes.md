@@ -17,7 +17,7 @@ kubectl apply -k k8s/overlays/production
 
 See the repo’s Kubernetes guide:
 
-- [k8s/README.md](../../k8s/README.md)
+- [`k8s/README.md`](https://github.com/ianlintner/rust_oauth2_server/blob/main/k8s/README.md)
 
 ## E2E on KIND
 
