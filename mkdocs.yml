@@ -1,8 +1,8 @@
 site_name: Rust OAuth2 Server
 site_description: A complete OAuth2 authorization server built with Rust and Actix-web
 site_author: Ian Lintner
-repo_url: https://github.com/ianlintner/rust_oauth2
-repo_name: ianlintner/rust_oauth2
+repo_url: https://github.com/ianlintner/rust_oauth2_server
+repo_name: ianlintner/rust_oauth2_server
 
 theme:
   name: material
@@ -47,8 +47,8 @@ markdown_extensions:
   - admonition
   - pymdownx.details
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - attr_list
   - md_in_html
 
@@ -58,6 +58,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
+      - Social Login Setup: getting-started/social-login-setup.md
   - Architecture:
       - Overview: architecture/overview.md
       - Actor Model: architecture/actors.md
@@ -71,6 +72,9 @@ nav:
       - Endpoints: api/endpoints.md
       - Authentication: api/authentication.md
       - Error Handling: api/errors.md
+  - Eventing:
+    - Overview: eventing.md
+    - Examples: examples/eventing.md
   - Observability:
       - Metrics: observability/metrics.md
       - Tracing: observability/tracing.md
@@ -88,3 +92,5 @@ nav:
       - Contributing: development/contributing.md
       - Testing: development/testing.md
       - CI/CD: development/cicd.md
+  - Operations:
+    - Runbooks: operations/runbooks.md

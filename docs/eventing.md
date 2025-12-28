@@ -5,9 +5,10 @@ The OAuth2 server now includes a comprehensive eventing system that emits events
 ## Features
 
 - **Configurable Event Filtering**: Choose which events to emit using inclusion or exclusion lists
-- **Pluggable Backends**: Support for multiple event backend plugins (in-memory, console, and extensible for Redis, Kafka, etc.)
+- **Pluggable Backends**: Support for multiple event backend plugins (in-memory, console, Redis Streams, Kafka, RabbitMQ)
 - **Actor-Based**: Built using the Actix actor model for concurrent, non-blocking event processing
-- **Rich Event Metadata**: Events include timestamps, user/client IDs, severity levels, and custom metadata
+- **Rich Event Metadata**: Events are wrapped in an `EventEnvelope` that carries timestamps, correlation IDs, optional idempotency, and W3C trace context (`traceparent`/`tracestate`)
+- **Best-effort semantics**: Event publishing is designed to never break core OAuth2 flows (failures are logged and ignored)
 
 ## Event Types
 
@@ -50,7 +51,11 @@ export OAUTH2_EVENTS_ENABLED=true
 Choose which backend plugin to use:
 
 ```bash
-# Backend options: in_memory, console, both
+# Backend options:
+# - in_memory, console, both
+# - redis (requires building with --features events-redis)
+# - kafka (requires building with --features events-kafka)
+# - rabbit (requires building with --features events-rabbit)
 # Default: in_memory
 export OAUTH2_EVENTS_BACKEND=console
 ```
@@ -58,6 +63,63 @@ export OAUTH2_EVENTS_BACKEND=console
 - **in_memory**: Stores events in memory (up to 1000 events by default)
 - **console**: Logs events to stdout/tracing system
 - **both**: Uses both in_memory and console backends
+- **redis**: Publishes JSON envelopes to Redis Streams via `XADD`
+- **kafka**: Publishes JSON envelopes to a Kafka topic
+- **rabbit**: Publishes JSON envelopes to a RabbitMQ exchange
+
+!!! note "Feature-gated backends"
+    Broker backends are compiled behind Cargo features to keep default builds lightweight.
+    If you set `OAUTH2_EVENTS_BACKEND` to a backend that is not compiled in (or fails to initialize), the server will log a warning and fall back to `in_memory`.
+
+#### Building with broker backends
+
+Examples:
+
+```bash
+# Redis Streams
+cargo run --features events-redis
+
+# Kafka
+cargo run --features events-kafka
+
+# RabbitMQ
+cargo run --features events-rabbit
+```
+
+For Docker builds, you can pass `CARGO_FEATURES`:
+
+```bash
+docker build --build-arg CARGO_FEATURES="events-redis" -t rust_oauth2_server:events-redis .
+```
+
+### Backend-specific environment variables
+
+#### Redis Streams
+
+```bash
+export OAUTH2_EVENTS_BACKEND=redis
+export OAUTH2_EVENTS_REDIS_URL=redis://localhost:6379
+export OAUTH2_EVENTS_REDIS_STREAM=oauth2:events
+export OAUTH2_EVENTS_REDIS_MAXLEN=10000
+```
+
+#### Kafka
+
+```bash
+export OAUTH2_EVENTS_BACKEND=kafka
+export OAUTH2_EVENTS_KAFKA_BROKERS=localhost:9092
+export OAUTH2_EVENTS_KAFKA_TOPIC=oauth2-events
+export OAUTH2_EVENTS_KAFKA_CLIENT_ID=rust-oauth2-server
+```
+
+#### RabbitMQ
+
+```bash
+export OAUTH2_EVENTS_BACKEND=rabbit
+export OAUTH2_EVENTS_RABBIT_URL=amqp://guest:guest@localhost:5672/%2f
+export OAUTH2_EVENTS_RABBIT_EXCHANGE=oauth2.events
+export OAUTH2_EVENTS_RABBIT_ROUTING_KEY=auth.*
+```
 
 ### Event Filtering
 
@@ -108,32 +170,49 @@ export OAUTH2_EVENTS_TYPES=token_validated,client_validated
 
 ## Event Structure
 
-Each event contains:
+Events are emitted as a transport-ready `EventEnvelope`:
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "event_type": "token_created",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "severity": "info",
-  "user_id": "user_123",
-  "client_id": "client_456",
-  "metadata": {
-    "scope": "read write",
-    "grant_type": "authorization_code",
-    "has_refresh_token": "true"
-  },
-  "error": null
+    "event": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "event_type": "token_created",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "severity": "info",
+        "user_id": "user_123",
+        "client_id": "client_456",
+        "metadata": {
+            "scope": "read write",
+            "grant_type": "authorization_code",
+            "has_refresh_token": "true"
+        },
+        "error": null
+    },
+    "idempotency_key": "optional-client-supplied-key",
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    "tracestate": null,
+    "correlation_id": "f6f2a64a-7eaf-4c3a-94af-4457cc8f8f2a",
+    "producer": "oauth2-server",
+    "produced_at": "2024-01-15T10:30:00Z",
+    "attributes": {
+        "source": "http"
+    }
 }
 ```
 
+### Idempotency
+
+For external producers calling `/events/ingest`, send an `Idempotency-Key` header.
+If omitted, the server will fall back to `event.id`.
+
 ## Extending with Custom Backends
 
-You can add custom event backend plugins by implementing the `EventPlugin` trait:
+You can add custom event backend plugins by implementing the `EventPlugin` trait.
+Plugins receive the full `EventEnvelope`, so metadata is never lost.
 
 ```rust
 use async_trait::async_trait;
-use crate::events::{AuthEvent, EventPlugin};
+use crate::events::{EventEnvelope, EventPlugin};
 
 pub struct RedisEventPlugin {
     // Redis connection details
@@ -141,8 +220,8 @@ pub struct RedisEventPlugin {
 
 #[async_trait]
 impl EventPlugin for RedisEventPlugin {
-    async fn emit(&self, event: &AuthEvent) -> Result<(), String> {
-        // Publish event to Redis
+    async fn emit(&self, envelope: &EventEnvelope) -> Result<(), String> {
+        // Publish envelope to your backend
         Ok(())
     }
     
@@ -192,18 +271,17 @@ The eventing system uses the Actix actor model:
 │  Token,     │
 │  Client)    │
 └──────┬──────┘
-       │ EmitEvent
-       ▼
+    │ EventBus (best-effort)
+    ▼
 ┌─────────────┐
-│ Event Actor │
+│ EventActor  │
 └──────┬──────┘
-       │ Parallel
-       │ Distribution
-       ▼
-┌─────────────┬─────────────┬─────────────┐
-│  In-Memory  │   Console   │   Custom    │
-│   Plugin    │   Plugin    │   Plugin    │
-└─────────────┴─────────────┴─────────────┘
+    │ fanout + filtering
+    ▼
+┌─────────────┬─────────────┬─────────────┬─────────────┐
+│  In-Memory  │   Console   │ RedisStream │ Kafka/Rabbit│
+│   Plugin    │   Plugin    │   Plugin    │   Plugin    │
+└─────────────┴─────────────┴─────────────┴─────────────┘
 ```
 
 Events are:
@@ -224,9 +302,6 @@ Events are:
 
 Planned features for future releases:
 
-- **Redis Plugin**: Direct integration with Redis pub/sub
-- **Kafka Plugin**: Native Kafka event streaming
-- **RabbitMQ Plugin**: Message queue integration
 - **Webhooks**: HTTP webhook callbacks for events
 - **Event Replay**: Ability to replay events from in-memory store
 - **Event Persistence**: Optional database storage for event history

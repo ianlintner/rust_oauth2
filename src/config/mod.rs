@@ -30,6 +30,19 @@ pub struct EventConfig {
     pub backend: String,
     pub filter_mode: String,
     pub event_types: Vec<String>,
+
+    // Optional backend-specific settings (used when backend selects them)
+    pub redis_url: Option<String>,
+    pub redis_stream: Option<String>,
+    pub redis_maxlen: Option<usize>,
+
+    pub kafka_brokers: Option<String>,
+    pub kafka_topic: Option<String>,
+    pub kafka_client_id: Option<String>,
+
+    pub rabbit_url: Option<String>,
+    pub rabbit_exchange: Option<String>,
+    pub rabbit_routing_key: Option<String>,
 }
 
 impl Default for Config {
@@ -70,6 +83,20 @@ impl Default for Config {
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect(),
+
+                redis_url: std::env::var("OAUTH2_EVENTS_REDIS_URL").ok(),
+                redis_stream: std::env::var("OAUTH2_EVENTS_REDIS_STREAM").ok(),
+                redis_maxlen: std::env::var("OAUTH2_EVENTS_REDIS_MAXLEN")
+                    .ok()
+                    .and_then(|v| v.parse().ok()),
+
+                kafka_brokers: std::env::var("OAUTH2_EVENTS_KAFKA_BROKERS").ok(),
+                kafka_topic: std::env::var("OAUTH2_EVENTS_KAFKA_TOPIC").ok(),
+                kafka_client_id: std::env::var("OAUTH2_EVENTS_KAFKA_CLIENT_ID").ok(),
+
+                rabbit_url: std::env::var("OAUTH2_EVENTS_RABBIT_URL").ok(),
+                rabbit_exchange: std::env::var("OAUTH2_EVENTS_RABBIT_EXCHANGE").ok(),
+                rabbit_routing_key: std::env::var("OAUTH2_EVENTS_RABBIT_ROUTING_KEY").ok(),
             },
         }
     }

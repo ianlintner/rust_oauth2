@@ -18,6 +18,7 @@ use actix_web::body::MessageBody;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{cookie::Key, middleware as actix_middleware, web, App, HttpResponse, HttpServer};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder, TracingLogger};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -192,6 +193,111 @@ async fn main() -> std::io::Result<()> {
                 Arc::new(InMemoryEventLogger::new(1000)),
                 Arc::new(ConsoleEventLogger::new()),
             ],
+            "redis" | "redis_streams" => {
+                #[cfg(feature = "events-redis")]
+                {
+                    let url = config
+                        .events
+                        .redis_url
+                        .clone()
+                        .unwrap_or_else(|| "redis://127.0.0.1:6379".to_string());
+
+                    let stream = config
+                        .events
+                        .redis_stream
+                        .clone()
+                        .unwrap_or_else(events::default_stream_name);
+
+                    let maxlen = config.events.redis_maxlen.or_else(events::default_maxlen);
+
+                    match events::RedisStreamsEventPublisher::connect(&url, stream, maxlen).await {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Redis event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-redis"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-redis' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
+            "kafka" => {
+                #[cfg(feature = "events-kafka")]
+                {
+                    let brokers = config
+                        .events
+                        .kafka_brokers
+                        .clone()
+                        .unwrap_or_else(|| "127.0.0.1:9092".to_string());
+                    let topic = config
+                        .events
+                        .kafka_topic
+                        .clone()
+                        .unwrap_or_else(|| "oauth2_events".to_string());
+
+                    match events::KafkaEventPublisher::new(
+                        &brokers,
+                        topic,
+                        config.events.kafka_client_id.clone(),
+                    ) {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Kafka event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-kafka"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-kafka' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
+            "rabbit" | "rabbitmq" => {
+                #[cfg(feature = "events-rabbit")]
+                {
+                    let url = config
+                        .events
+                        .rabbit_url
+                        .clone()
+                        .unwrap_or_else(|| "amqp://127.0.0.1:5672/%2f".to_string());
+                    let exchange = config
+                        .events
+                        .rabbit_exchange
+                        .clone()
+                        .unwrap_or_else(|| "oauth2.events".to_string());
+                    let routing_key = config
+                        .events
+                        .rabbit_routing_key
+                        .clone()
+                        .unwrap_or_else(|| "oauth2.event".to_string());
+
+                    match events::RabbitEventPublisher::connect(&url, exchange, routing_key).await {
+                        Ok(p) => vec![Arc::new(p)],
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Rabbit event backend init failed; falling back to in_memory");
+                            vec![Arc::new(InMemoryEventLogger::new(1000))]
+                        }
+                    }
+                }
+                #[cfg(not(feature = "events-rabbit"))]
+                {
+                    tracing::warn!(
+                        "Event backend '{}' requested but feature 'events-rabbit' is not enabled; falling back to in_memory",
+                        config.events.backend
+                    );
+                    vec![Arc::new(InMemoryEventLogger::new(1000))]
+                }
+            }
             _ => {
                 tracing::warn!(
                     "Unknown event backend: {}, using in_memory",
@@ -209,22 +315,33 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
+    // Wrap the actor-backed event system behind the stable EventBus contract.
+    let event_bus = event_actor.as_ref().map(|addr| {
+        let bus = events::ActixEventBus::new(addr.clone());
+        events::EventBusHandle::new(Arc::new(bus))
+    });
+
+    // Best-effort Phase 1 in-memory idempotency cache for ingest.
+    let ingest_idempotency = handlers::events::IdempotencyStore::new(Duration::from_secs(5 * 60))
+        // Explicitly set to default to make it configurable without changing call sites.
+        .with_max_entries(100_000);
+
     // Start actors with event system
-    let token_actor = if let Some(ref event_actor) = event_actor {
-        actors::TokenActor::with_events(storage.clone(), jwt_secret.clone(), event_actor.clone())
+    let token_actor = if let Some(ref event_bus) = event_bus {
+        actors::TokenActor::with_events(storage.clone(), jwt_secret.clone(), event_bus.clone())
             .start()
     } else {
         actors::TokenActor::new(storage.clone(), jwt_secret.clone()).start()
     };
 
-    let client_actor = if let Some(ref event_actor) = event_actor {
-        actors::ClientActor::with_events(storage.clone(), event_actor.clone()).start()
+    let client_actor = if let Some(ref event_bus) = event_bus {
+        actors::ClientActor::with_events(storage.clone(), event_bus.clone()).start()
     } else {
         actors::ClientActor::new(storage.clone()).start()
     };
 
-    let auth_actor = if let Some(ref event_actor) = event_actor {
-        actors::AuthActor::with_events(storage.clone(), event_actor.clone()).start()
+    let auth_actor = if let Some(ref event_bus) = event_bus {
+        actors::AuthActor::with_events(storage.clone(), event_bus.clone()).start()
     } else {
         actors::AuthActor::new(storage.clone()).start()
     };
@@ -269,9 +386,17 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(metrics.clone()))
             .app_data(web::Data::new(social_config.clone()));
 
+        // Shared, best-effort in-memory idempotency cache for event ingest.
+        app = app.app_data(web::Data::new(ingest_idempotency.clone()));
+
         // Add event actor if enabled
         if let Some(ref event_actor) = event_actor {
             app = app.app_data(web::Data::new(event_actor.clone()));
+        }
+
+        // Add event bus handle if enabled
+        if let Some(ref event_bus) = event_bus {
+            app = app.app_data(web::Data::new(event_bus.clone()));
         }
 
         app
@@ -361,6 +486,12 @@ async fn main() -> std::io::Result<()> {
             .route("/health", web::get().to(handlers::admin::health))
             .route("/ready", web::get().to(handlers::admin::readiness))
             .route("/metrics", web::get().to(handlers::admin::system_metrics))
+            // Eventing endpoints
+            .service(
+                web::scope("/events")
+                    .route("/ingest", web::post().to(handlers::events::ingest))
+                    .route("/health", web::get().to(handlers::events::health)),
+            )
             // Swagger UI
             .service(
                 SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),

@@ -11,7 +11,7 @@ Before starting, make sure you have completed the [Installation Guide](installat
 ### Development Mode
 
 ```bash
-cd rust_oauth2
+cd rust_oauth2_server
 cargo run
 ```
 
@@ -409,7 +409,7 @@ Now that you have the basics working:
 3. **Explore Advanced Features**:
    - [Token Introspection](../api/endpoints.md#token-introspection)
    - [Scope Management](../api/authentication.md#scopes)
-   - [Custom Claims](../architecture/overview.md#jwt-tokens)
+  - [Custom Claims](../architecture/overview.md#jwt-token-structure)
 4. **Monitor Your Server**: Set up [Metrics and Tracing](../observability/metrics.md)
 5. **Deploy to Production**: Follow [Deployment Guides](../deployment/docker.md)
 
@@ -440,4 +440,4 @@ Now that you have the basics working:
 
 - Check the [API Reference](../api/endpoints.md) for detailed endpoint documentation
 - Review [OAuth2 Flows](../flows/authorization-code.md) for in-depth flow explanations
-- Visit [GitHub Issues](https://github.com/ianlintner/rust_oauth2/issues) for community support
+- Visit [GitHub Issues](https://github.com/ianlintner/rust_oauth2_server/issues) for community support

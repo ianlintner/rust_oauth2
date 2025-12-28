@@ -121,6 +121,7 @@ impl AuthEvent {
     }
 
     /// Convert event to JSON string
+    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }

@@ -29,7 +29,7 @@ A production-ready OAuth2 authorization server built with Rust and Actix-web, fe
 ### Project Structure
 
 ```
-rust_oauth2/
+rust_oauth2_server/
 ├── src/
 │   ├── actors/          # Actor model implementations
 │   │   ├── token_actor.rs
@@ -340,8 +340,8 @@ Inspired by:
 
 ## Support
 
-- Repository: <https://github.com/ianlintner/rust_oauth2>
-- Issues: <https://github.com/ianlintner/rust_oauth2/issues>
+- Repository: <https://github.com/ianlintner/rust_oauth2_server>
+- Issues: <https://github.com/ianlintner/rust_oauth2_server/issues>
 - Documentation: See `/docs` directory
 
 ---

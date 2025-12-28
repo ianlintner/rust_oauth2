@@ -1,7 +1,4 @@
-use crate::events::{
-    event_actor::{EmitEvent, EventActor},
-    AuthEvent, EventSeverity, EventType,
-};
+use crate::events::{AuthEvent, EventBusHandle, EventEnvelope, EventSeverity, EventType};
 use crate::models::{AuthorizationCode, OAuth2Error};
 use crate::storage::DynStorage;
 use actix::prelude::*;
@@ -10,21 +7,21 @@ use tracing::Instrument;
 
 pub struct AuthActor {
     db: DynStorage,
-    event_actor: Option<Addr<EventActor>>,
+    event_bus: Option<EventBusHandle>,
 }
 
 impl AuthActor {
     pub fn new(db: DynStorage) -> Self {
         Self {
             db,
-            event_actor: None,
+            event_bus: None,
         }
     }
 
-    pub fn with_events(db: DynStorage, event_actor: Addr<EventActor>) -> Self {
+    pub fn with_events(db: DynStorage, event_bus: EventBusHandle) -> Self {
         Self {
             db,
-            event_actor: Some(event_actor),
+            event_bus: Some(event_bus),
         }
     }
 }
@@ -50,7 +47,7 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
 
     fn handle(&mut self, msg: CreateAuthorizationCode, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let actor_span = tracing::info_span!(
@@ -79,7 +76,7 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
                 db.save_authorization_code(&auth_code).await?;
 
                 // Emit event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::AuthorizationCodeCreated,
                         EventSeverity::Info,
@@ -89,7 +86,8 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
                     .with_metadata("scope", msg.scope)
                     .with_metadata("redirect_uri", msg.redirect_uri);
 
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(auth_code)
@@ -114,7 +112,7 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
 
     fn handle(&mut self, msg: ValidateAuthorizationCode, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let code_prefix = msg.code.chars().take(12).collect::<String>();
@@ -138,14 +136,15 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
 
                 if !auth_code.is_valid() {
                     // Emit expired event
-                    if let Some(event_actor) = &event_actor {
+                    if let Some(event_bus) = &event_bus {
                         let event = AuthEvent::new(
                             EventType::AuthorizationCodeExpired,
                             EventSeverity::Warning,
                             Some(auth_code.user_id.clone()),
                             Some(auth_code.client_id.clone()),
                         );
-                        event_actor.do_send(EmitEvent { event });
+                        let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                        event_bus.publish_best_effort(envelope);
                     }
 
                     return Err(OAuth2Error::invalid_grant(
@@ -180,14 +179,15 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                 db.mark_authorization_code_used(&msg.code).await?;
 
                 // Emit validated event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::AuthorizationCodeValidated,
                         EventSeverity::Info,
                         Some(auth_code.user_id.clone()),
                         Some(auth_code.client_id.clone()),
                     );
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(auth_code)

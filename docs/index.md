@@ -161,8 +161,8 @@ sequenceDiagram
 
 ```bash
 # Clone the repository
-git clone https://github.com/ianlintner/rust_oauth2.git
-cd rust_oauth2
+git clone https://github.com/ianlintner/rust_oauth2_server.git
+cd rust_oauth2_server
 
 # Run database migrations
 ./scripts/migrate.sh
@@ -329,9 +329,9 @@ View Swagger UI at `http://localhost:8080/swagger-ui`
 ## Support and Community
 
 - **Documentation**: You're reading it!
-- **Issues**: [GitHub Issues](https://github.com/ianlintner/rust_oauth2/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ianlintner/rust_oauth2/discussions)
-- **Source Code**: [GitHub Repository](https://github.com/ianlintner/rust_oauth2)
+- **Issues**: [GitHub Issues](https://github.com/ianlintner/rust_oauth2_server/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ianlintner/rust_oauth2_server/discussions)
+- **Source Code**: [GitHub Repository](https://github.com/ianlintner/rust_oauth2_server)
 
 ## Next Steps
 

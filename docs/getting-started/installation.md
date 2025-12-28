@@ -55,8 +55,8 @@ Before installing the OAuth2 server, ensure you have the following prerequisites
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/ianlintner/rust_oauth2.git
-cd rust_oauth2
+git clone https://github.com/ianlintner/rust_oauth2_server.git
+cd rust_oauth2_server
 ```
 
 ### 2. Install Rust Dependencies
@@ -335,6 +335,6 @@ After successful installation:
 If you encounter any issues during installation:
 
 1. Check the [Troubleshooting](#troubleshooting) section above
-2. Review the [GitHub Issues](https://github.com/ianlintner/rust_oauth2/issues)
+2. Review the [GitHub Issues](https://github.com/ianlintner/rust_oauth2_server/issues)
 3. Consult the [Configuration Guide](configuration.md)
 4. Open a new issue with detailed error information

@@ -8,8 +8,8 @@ The fastest way to get started with Docker:
 
 ```bash
 # Clone the repository
-git clone https://github.com/ianlintner/rust_oauth2.git
-cd rust_oauth2
+git clone https://github.com/ianlintner/rust_oauth2_server.git
+cd rust_oauth2_server
 
 # Start with Docker Compose
 docker-compose up -d
