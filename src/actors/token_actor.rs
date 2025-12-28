@@ -1,7 +1,4 @@
-use crate::events::{
-    event_actor::{EmitEvent, EventActor},
-    AuthEvent, EventSeverity, EventType,
-};
+use crate::events::{AuthEvent, EventBusHandle, EventEnvelope, EventSeverity, EventType};
 use crate::models::{Claims, OAuth2Error, Token};
 use crate::storage::DynStorage;
 use actix::prelude::*;
@@ -10,7 +7,7 @@ use tracing::Instrument;
 pub struct TokenActor {
     db: DynStorage,
     jwt_secret: String,
-    event_actor: Option<Addr<EventActor>>,
+    event_bus: Option<EventBusHandle>,
 }
 
 impl TokenActor {
@@ -18,15 +15,15 @@ impl TokenActor {
         Self {
             db,
             jwt_secret,
-            event_actor: None,
+            event_bus: None,
         }
     }
 
-    pub fn with_events(db: DynStorage, jwt_secret: String, event_actor: Addr<EventActor>) -> Self {
+    pub fn with_events(db: DynStorage, jwt_secret: String, event_bus: EventBusHandle) -> Self {
         Self {
             db,
             jwt_secret,
-            event_actor: Some(event_actor),
+            event_bus: Some(event_bus),
         }
     }
 }
@@ -51,7 +48,7 @@ impl Handler<CreateToken> for TokenActor {
     fn handle(&mut self, msg: CreateToken, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
         let jwt_secret = self.jwt_secret.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let actor_span = tracing::info_span!(
@@ -109,7 +106,7 @@ impl Handler<CreateToken> for TokenActor {
                 db.save_token(&token).await?;
 
                 // Emit event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::TokenCreated,
                         EventSeverity::Info,
@@ -119,7 +116,8 @@ impl Handler<CreateToken> for TokenActor {
                     .with_metadata("scope", msg.scope)
                     .with_metadata("has_refresh_token", msg.include_refresh.to_string());
 
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(token)
@@ -141,7 +139,7 @@ impl Handler<ValidateToken> for TokenActor {
 
     fn handle(&mut self, msg: ValidateToken, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
         let parent_span = msg.span.clone();
         let raw_token = msg.token;
         let token_prefix = raw_token.trim().chars().take(12).collect::<String>();
@@ -186,28 +184,30 @@ impl Handler<ValidateToken> for TokenActor {
                         "Token is not valid (expired or revoked)"
                     );
                     // Emit expired/invalid event
-                    if let Some(event_actor) = &event_actor {
+                    if let Some(event_bus) = &event_bus {
                         let event = AuthEvent::new(
                             EventType::TokenExpired,
                             EventSeverity::Warning,
                             token.user_id.clone(),
                             Some(token.client_id.clone()),
                         );
-                        event_actor.do_send(EmitEvent { event });
+                        let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                        event_bus.publish_best_effort(envelope);
                     }
 
                     return Err(OAuth2Error::invalid_grant("Token is expired or revoked"));
                 }
 
                 // Emit validated event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     let event = AuthEvent::new(
                         EventType::TokenValidated,
                         EventSeverity::Info,
                         token.user_id.clone(),
                         Some(token.client_id.clone()),
                     );
-                    event_actor.do_send(EmitEvent { event });
+                    let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                    event_bus.publish_best_effort(envelope);
                 }
 
                 Ok(token)
@@ -229,7 +229,7 @@ impl Handler<RevokeToken> for TokenActor {
 
     fn handle(&mut self, msg: RevokeToken, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        let event_actor = self.event_actor.clone();
+        let event_bus = self.event_bus.clone();
 
         let parent_span = msg.span.clone();
         let token_prefix = msg.token.trim().chars().take(12).collect::<String>();
@@ -251,7 +251,7 @@ impl Handler<RevokeToken> for TokenActor {
                 db.revoke_token(&msg.token).await?;
 
                 // Emit revoked event
-                if let Some(event_actor) = event_actor {
+                if let Some(event_bus) = event_bus {
                     if let Some(token) = token_info {
                         let event = AuthEvent::new(
                             EventType::TokenRevoked,
@@ -259,7 +259,8 @@ impl Handler<RevokeToken> for TokenActor {
                             token.user_id,
                             Some(token.client_id),
                         );
-                        event_actor.do_send(EmitEvent { event });
+                        let envelope = EventEnvelope::from_current_span(event, "oauth2_server");
+                        event_bus.publish_best_effort(envelope);
                     }
                 }
 

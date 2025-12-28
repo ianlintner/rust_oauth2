@@ -47,4 +47,17 @@ impl EventBusHandle {
     pub async fn publish(&self, envelope: EventEnvelope) -> Result<(), EventBusError> {
         self.inner.publish(envelope).await
     }
+
+    /// Fire-and-forget publish.
+    ///
+    /// This is the recommended way to publish events from core OAuth2 flows.
+    /// Any publish error is logged but does not affect the caller.
+    pub fn publish_best_effort(&self, envelope: EventEnvelope) {
+        let handle = self.clone();
+        actix_rt::spawn(async move {
+            if let Err(err) = handle.publish(envelope).await {
+                tracing::warn!(error = %err, "event publish failed (best-effort)");
+            }
+        });
+    }
 }
