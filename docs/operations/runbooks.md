@@ -631,7 +631,6 @@ Recommended approach is to rotate the JWT secret (see above) and/or rotate signi
 
 For more specific scenarios, see:
 
-- **[Operations Agent](.github/agents/operations.md)** - Comprehensive operational procedures
 - **[Operations Agent](https://github.com/ianlintner/rust_oauth2_server/blob/main/.github/agents/operations.md)** - Comprehensive operational procedures
 - **[Database Agent](https://github.com/ianlintner/rust_oauth2_server/blob/main/.github/agents/database.md)** - Database-specific operations
 - **[Security Agent](https://github.com/ianlintner/rust_oauth2_server/blob/main/.github/agents/security.md)** - Security incident response
