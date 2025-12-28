@@ -25,3 +25,25 @@ cargo fmt -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
+
+## Building the documentation site
+
+The docs site is built with MkDocs + Material.
+
+Install doc dependencies:
+
+```bash
+python3 -m pip install -r requirements-docs.txt
+```
+
+Serve locally:
+
+```bash
+mkdocs serve
+```
+
+Build a static site:
+
+```bash
+mkdocs build
+```
