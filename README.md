@@ -97,8 +97,8 @@ graph LR
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/ianlintner/rust_oauth2.git
-cd rust_oauth2
+git clone https://github.com/ianlintner/rust_oauth2_server.git
+cd rust_oauth2_server
 ```
 
 ### Run Database Migrations

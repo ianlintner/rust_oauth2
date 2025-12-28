@@ -69,7 +69,7 @@ impl EventPlugin for RabbitEventPublisher {
                 &payload,
                 BasicProperties::default()
                     .with_content_type("application/json".into())
-                    .with_message_id(envelope.event_id.to_string().into())
+                    .with_message_id(envelope.event.id.to_string().into())
                     .with_correlation_id(envelope.correlation_id.clone().into()),
             )
             .await

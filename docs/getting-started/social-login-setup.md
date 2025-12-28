@@ -202,6 +202,6 @@ cargo run
 
 For issues or questions:
 
-- Check the [documentation](https://github.com/ianlintner/rust_oauth2)
+- Check the [documentation](https://github.com/ianlintner/rust_oauth2_server)
 - Open an issue on GitHub
 - Review provider-specific documentation

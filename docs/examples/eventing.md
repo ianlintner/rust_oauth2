@@ -14,6 +14,9 @@ export OAUTH2_EVENTS_FILTER_MODE=allow_all
 cargo run
 ```
 
+!!! note
+  Console and in-memory backends are available in the default build.
+
 ## Example 2: Production with Selective Events
 
 For production, only log critical security events:
@@ -143,40 +146,89 @@ spec:
 
 ## Event Output Example
 
-When running with `OAUTH2_EVENTS_BACKEND=console`, you'll see events like:
+When running with `OAUTH2_EVENTS_BACKEND=console`, you'll see JSON envelopes like:
 
 ```json
 {
-  "id": "7f3a8c94-f7e2-4d15-9c7b-8e5d4a1b2c3d",
-  "event_type": "token_created",
-  "timestamp": "2024-01-15T14:32:45.123456Z",
-  "severity": "info",
-  "user_id": "user_123",
-  "client_id": "client_abc123",
-  "metadata": {
-    "scope": "read write",
-    "has_refresh_token": "true"
+  "event": {
+    "id": "7f3a8c94-f7e2-4d15-9c7b-8e5d4a1b2c3d",
+    "event_type": "token_created",
+    "timestamp": "2024-01-15T14:32:45.123456Z",
+    "severity": "info",
+    "user_id": "user_123",
+    "client_id": "client_abc123",
+    "metadata": {
+      "scope": "read write",
+      "has_refresh_token": "true"
+    },
+    "error": null
   },
-  "error": null
+  "idempotency_key": null,
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "tracestate": null,
+  "correlation_id": "f6f2a64a-7eaf-4c3a-94af-4457cc8f8f2a",
+  "producer": "oauth2-server",
+  "produced_at": "2024-01-15T14:32:45.123456Z",
+  "attributes": {
+    "source": "http"
+  }
 }
 ```
 
-## Future Plugin Examples
+## Broker Backend Examples
 
-Once Redis/Kafka plugins are implemented, you'll be able to use them like:
+Broker backends are feature-gated. You must build/run with the right Cargo feature enabled.
 
-### Redis Example (Future):
+### Redis Streams
+
+Run with:
+
+```bash
+cargo run --features events-redis
+```
+
+Configure:
+
 ```bash
 export OAUTH2_EVENTS_ENABLED=true
 export OAUTH2_EVENTS_BACKEND=redis
 export OAUTH2_EVENTS_REDIS_URL=redis://localhost:6379
-export OAUTH2_EVENTS_REDIS_CHANNEL=oauth2:events
+export OAUTH2_EVENTS_REDIS_STREAM=oauth2:events
+export OAUTH2_EVENTS_REDIS_MAXLEN=10000
 ```
 
-### Kafka Example (Future):
+### Kafka
+
+Run with:
+
+```bash
+cargo run --features events-kafka
+```
+
+Configure:
+
 ```bash
 export OAUTH2_EVENTS_ENABLED=true
 export OAUTH2_EVENTS_BACKEND=kafka
 export OAUTH2_EVENTS_KAFKA_BROKERS=localhost:9092
 export OAUTH2_EVENTS_KAFKA_TOPIC=oauth2-events
+export OAUTH2_EVENTS_KAFKA_CLIENT_ID=rust-oauth2-server
+```
+
+### RabbitMQ
+
+Run with:
+
+```bash
+cargo run --features events-rabbit
+```
+
+Configure:
+
+```bash
+export OAUTH2_EVENTS_ENABLED=true
+export OAUTH2_EVENTS_BACKEND=rabbit
+export OAUTH2_EVENTS_RABBIT_URL=amqp://guest:guest@localhost:5672/%2f
+export OAUTH2_EVENTS_RABBIT_EXCHANGE=oauth2.events
+export OAUTH2_EVENTS_RABBIT_ROUTING_KEY=auth.*
 ```

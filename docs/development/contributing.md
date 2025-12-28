@@ -12,11 +12,11 @@ Be respectful, inclusive, and professional in all interactions.
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/rust_oauth2.git
-cd rust_oauth2
+git clone https://github.com/YOUR_USERNAME/rust_oauth2_server.git
+cd rust_oauth2_server
 
 # Add upstream remote
-git remote add upstream https://github.com/ianlintner/rust_oauth2.git
+git remote add upstream https://github.com/ianlintner/rust_oauth2_server.git
 ```
 
 ### 2. Set Up Development Environment
@@ -66,7 +66,7 @@ cargo fmt && cargo clippy -- -D warnings && cargo test
 ### Project Structure
 
 ```
-rust_oauth2/
+rust_oauth2_server/
 ├── src/
 │   ├── actors/          # Actor implementations
 │   ├── handlers/        # HTTP request handlers
@@ -466,7 +466,7 @@ When making significant changes:
 
 ## Getting Help
 
-- **Documentation**: Read the [docs](https://github.com/ianlintner/rust_oauth2/tree/main/docs)
+- **Documentation**: Read the [docs](https://github.com/ianlintner/rust_oauth2_server/tree/main/docs)
 - **Issues**: Search existing issues
 - **Discussions**: Use GitHub Discussions
 - **Questions**: Open a Q&A discussion

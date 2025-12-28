@@ -24,11 +24,13 @@ graph LR
     A --> E[Admin]
     A --> F[Observability]
     A --> G[Discovery]
+  A --> H[Eventing]
     
     style A fill:#ff9800,color:#fff
     style B fill:#4caf50,color:#fff
     style C fill:#2196f3,color:#fff
     style D fill:#9c27b0,color:#fff
+    style H fill:#607d8b,color:#fff
 ```
 
 ## OAuth2 Endpoints
@@ -363,6 +365,80 @@ Prometheus metrics endpoint.
 **Endpoint:** `GET /metrics`
 
 **Response:** Prometheus text format metrics
+
+## Eventing Endpoints
+
+These endpoints are only useful when eventing is enabled (`OAUTH2_EVENTS_ENABLED=true`).
+
+### Event System Health
+
+Check event backend/plugin health.
+
+**Endpoint:** `GET /events/health`
+
+**Response (disabled):**
+
+```json
+{
+  "enabled": false,
+  "plugins": []
+}
+```
+
+**Response (enabled):**
+
+```json
+{
+  "enabled": true,
+  "plugins": [
+    {
+      "name": "console",
+      "healthy": true
+    }
+  ]
+}
+```
+
+### Ingest External Event
+
+Submit an externally-produced event envelope to the server.
+
+**Endpoint:** `POST /events/ingest`
+
+**Headers:**
+
+- `Content-Type: application/json`
+- `Idempotency-Key: <string>` (recommended)
+
+**Body:** `EventEnvelope` JSON (see `docs/eventing.md` for structure)
+
+**Response (accepted):**
+
+```json
+{
+  "status": "accepted",
+  "idempotency_key": "your-key",
+  "event_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (duplicate):**
+
+```json
+{
+  "status": "duplicate",
+  "idempotency_key": "your-key",
+  "event_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (eventing disabled):**
+
+```json
+{
+  "error": "eventing_disabled"
+}
+```
 
 ## Social Login Endpoints
 

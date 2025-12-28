@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Ian Lintner"]
 description = "A complete OAuth2 server implementation using Actix-web and the actor model"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ianlintner/rust_oauth2"
+repository = "https://github.com/ianlintner/rust_oauth2_server"
 
 [dependencies]
 # Actix Web Framework

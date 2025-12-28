@@ -1,8 +1,8 @@
 site_name: Rust OAuth2 Server
 site_description: A complete OAuth2 authorization server built with Rust and Actix-web
 site_author: Ian Lintner
-repo_url: https://github.com/ianlintner/rust_oauth2
-repo_name: ianlintner/rust_oauth2
+repo_url: https://github.com/ianlintner/rust_oauth2_server
+repo_name: ianlintner/rust_oauth2_server
 
 theme:
   name: material
@@ -71,6 +71,9 @@ nav:
       - Endpoints: api/endpoints.md
       - Authentication: api/authentication.md
       - Error Handling: api/errors.md
+  - Eventing:
+    - Overview: eventing.md
+    - Examples: examples/eventing.md
   - Observability:
       - Metrics: observability/metrics.md
       - Tracing: observability/tracing.md
@@ -88,3 +91,5 @@ nav:
       - Contributing: development/contributing.md
       - Testing: development/testing.md
       - CI/CD: development/cicd.md
+  - Operations:
+    - Runbooks: operations/runbooks.md
