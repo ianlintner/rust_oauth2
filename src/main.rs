@@ -5,10 +5,10 @@ use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::body::MessageBody;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::{cookie::Key, middleware as actix_middleware, web, App, HttpResponse, HttpServer};
-use rust_oauth2_server::{
-    actors, config, events, handlers, middleware, metrics, models, storage, telemetry,
-};
 use rust_oauth2_server::openapi::ApiDoc;
+use rust_oauth2_server::{
+    actors, config, events, handlers, metrics, middleware, models, storage, telemetry,
+};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing_actix_web::{DefaultRootSpanBuilder, RootSpanBuilder, TracingLogger};
