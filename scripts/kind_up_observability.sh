@@ -21,6 +21,7 @@ KUSTOMIZE_DIR="${KUSTOMIZE_DIR:-k8s/overlays/e2e-kind-observability}"
 SKIP_IMAGE_BUILD="${SKIP_IMAGE_BUILD:-0}"
 RECREATE_CLUSTER="${RECREATE_CLUSTER:-1}"
 RECREATE_NAMESPACE="${RECREATE_NAMESPACE:-1}"
+REGENERATE_SLO_RULES="${REGENERATE_SLO_RULES:-0}"
 
 GRAFANA_PORT="${GRAFANA_PORT:-}"
 JAEGER_PORT="${JAEGER_PORT:-}"
@@ -39,6 +40,7 @@ Environment overrides:
   SKIP_IMAGE_BUILD=1    Skip docker build (requires IMAGE_REF to exist locally)
   RECREATE_CLUSTER=0    Reuse existing cluster instead of deleting/recreating
   RECREATE_NAMESPACE=0  Reuse existing namespace resources
+  REGENERATE_SLO_RULES=1 Regenerate SLO rules via Sloth (default: 0 / use committed rules)
 
   GRAFANA_PORT=XXXX  Fixed local port for Grafana port-forward (default: choose free port)
   JAEGER_PORT=XXXX   Fixed local port for Jaeger UI port-forward (default: choose free port)
@@ -89,6 +91,52 @@ s.close()
 PY
 }
 
+_diag() {
+  echo "\n--- Diagnostics (namespace=${NAMESPACE})" >&2
+  kubectl get all -n "${NAMESPACE}" -o wide >&2 || true
+  echo "\n--- Recent events" >&2
+  kubectl get events -n "${NAMESPACE}" --sort-by=.lastTimestamp >&2 | tail -100 || true
+  echo "\n--- Pods describe" >&2
+  kubectl describe pods -n "${NAMESPACE}" >&2 || true
+  echo "\n--- Jaeger logs" >&2
+  kubectl logs deployment/jaeger -n "${NAMESPACE}" --tail=200 >&2 || true
+  echo "\n--- Grafana logs" >&2
+  kubectl logs deployment/grafana -n "${NAMESPACE}" --tail=200 >&2 || true
+}
+
+_remove_stale_kind_nodes() {
+  # If a previous KIND delete left containers behind, they can block cluster recreation.
+  # We identify nodes via the standard label KIND sets on Docker containers.
+  local nodes
+  nodes=$(docker ps -a --filter "label=io.x-k8s.kind.cluster=${CLUSTER_NAME}" --format '{{.ID}}' || true)
+  if [[ -n "${nodes}" ]]; then
+    echo "Found stale KIND node containers; removing..." >&2
+    # shellcheck disable=SC2086
+    docker rm -f ${nodes} >/dev/null 2>&1 || true
+  fi
+}
+
+_ensure_kind_cluster() {
+  echo "==> Ensuring KIND cluster (${CLUSTER_NAME})"
+  if kind get clusters | grep -qx "${CLUSTER_NAME}"; then
+    if [[ "${RECREATE_CLUSTER}" == "1" ]]; then
+      echo "Cluster exists; deleting for repeatability (RECREATE_CLUSTER=1)"
+      kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1 || true
+    else
+      echo "Reusing existing cluster (RECREATE_CLUSTER=0)"
+      return 0
+    fi
+  fi
+
+  # KIND sometimes errors with "node(s) already exist" if Docker containers were left behind.
+  if ! kind create cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1; then
+    echo "kind create cluster failed; attempting to remove stale node containers and retry..." >&2
+    _remove_stale_kind_nodes
+    kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1 || true
+    kind create cluster --name "${CLUSTER_NAME}" >/dev/null
+  fi
+}
+
 PF_GRAFANA_PID=""
 PF_JAEGER_PID=""
 PF_APP_PID=""
@@ -109,27 +157,14 @@ echo "==> Syncing in-cluster observability assets"
 # This does NOT require Sloth; it just copies committed files.
 "${ROOT_DIR}/scripts/sync_incluster_observability_assets.sh" >/dev/null
 
-# (Optional) regenerate SLO rules if Docker is available (it is, since KIND uses it).
-# If this fails, we still continue with the last committed rules.
-if [[ -f "${ROOT_DIR}/scripts/generate_slo_rules.sh" ]]; then
-  echo "==> (Optional) Regenerating SLO rules via Sloth"
+if [[ "${REGENERATE_SLO_RULES}" == "1" ]] && [[ -f "${ROOT_DIR}/scripts/generate_slo_rules.sh" ]]; then
+  echo "==> Regenerating SLO rules via Sloth (REGENERATE_SLO_RULES=1)"
   if ! "${ROOT_DIR}/scripts/generate_slo_rules.sh" >/dev/null 2>&1; then
-    echo "    (Skipping: failed to regenerate SLO rules; using committed rules)"
+    echo "    (Warning: failed to regenerate SLO rules; using committed rules)" >&2
   fi
 fi
 
-echo "==> Ensuring KIND cluster (${CLUSTER_NAME})"
-if kind get clusters | grep -qx "${CLUSTER_NAME}"; then
-  if [[ "${RECREATE_CLUSTER}" == "1" ]]; then
-    echo "Cluster exists; deleting for repeatability (RECREATE_CLUSTER=1)"
-    kind delete cluster --name "${CLUSTER_NAME}" >/dev/null
-    kind create cluster --name "${CLUSTER_NAME}" >/dev/null
-  else
-    echo "Reusing existing cluster (RECREATE_CLUSTER=0)"
-  fi
-else
-  kind create cluster --name "${CLUSTER_NAME}" >/dev/null
-fi
+_ensure_kind_cluster
 
 if [[ "${SKIP_IMAGE_BUILD}" == "1" ]]; then
   echo "==> Skipping image build (SKIP_IMAGE_BUILD=1); verifying image exists: ${IMAGE_REF}"
@@ -169,8 +204,16 @@ echo "==> Waiting for oauth2-server rollout"
 kubectl rollout status deployment/oauth2-server -n "${NAMESPACE}" --timeout=240s >/dev/null
 
 echo "==> Waiting for Grafana + Jaeger rollouts"
-kubectl rollout status deployment/grafana -n "${NAMESPACE}" --timeout=240s >/dev/null
-kubectl rollout status deployment/jaeger -n "${NAMESPACE}" --timeout=240s >/dev/null
+if ! kubectl rollout status deployment/grafana -n "${NAMESPACE}" --timeout=240s >/dev/null; then
+  echo "Grafana did not become ready in time." >&2
+  _diag
+  exit 1
+fi
+if ! kubectl rollout status deployment/jaeger -n "${NAMESPACE}" --timeout=240s >/dev/null; then
+  echo "Jaeger did not become ready in time." >&2
+  _diag
+  exit 1
+fi
 
 if [[ -z "${GRAFANA_PORT}" ]]; then
   GRAFANA_PORT="$(_free_port)"
