@@ -22,6 +22,7 @@ SKIP_IMAGE_BUILD="${SKIP_IMAGE_BUILD:-0}"
 RECREATE_CLUSTER="${RECREATE_CLUSTER:-1}"
 RECREATE_NAMESPACE="${RECREATE_NAMESPACE:-1}"
 REGENERATE_SLO_RULES="${REGENERATE_SLO_RULES:-0}"
+HOLD_OPEN="${HOLD_OPEN:-1}"
 
 GRAFANA_PORT="${GRAFANA_PORT:-}"
 JAEGER_PORT="${JAEGER_PORT:-}"
@@ -41,6 +42,7 @@ Environment overrides:
   RECREATE_CLUSTER=0    Reuse existing cluster instead of deleting/recreating
   RECREATE_NAMESPACE=0  Reuse existing namespace resources
   REGENERATE_SLO_RULES=1 Regenerate SLO rules via Sloth (default: 0 / use committed rules)
+  HOLD_OPEN=0           Exit after printing URLs (default: 1 / keep port-forwards running)
 
   GRAFANA_PORT=XXXX  Fixed local port for Grafana port-forward (default: choose free port)
   JAEGER_PORT=XXXX   Fixed local port for Jaeger UI port-forward (default: choose free port)
@@ -251,5 +253,9 @@ echo "  make kind-observability-traffic"
 echo ""
 echo "This process will keep running to hold the port-forwards open. Ctrl-C to stop."
 
-# Block forever while port-forwards are alive.
-wait
+if [[ "${HOLD_OPEN}" == "1" ]]; then
+  # Block forever while port-forwards are alive.
+  wait
+fi
+
+echo "HOLD_OPEN=0 set; exiting now (port-forwards will be stopped)."
