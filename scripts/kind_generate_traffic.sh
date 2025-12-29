@@ -33,7 +33,7 @@ Usage: ./scripts/kind_generate_traffic.sh [options]
 Options:
   --namespace <ns>         Kubernetes namespace (default: oauth2-server)
   --service <name>         Service name (default: oauth2-server)
-  --duration <dur>         Test duration for hey -z (default: 5m)
+  --duration <dur>         Test duration (default: 5m). Format: 30s, 5m, 1h
 
   --qps-success <n>        QPS for successful POST /oauth/token (default: 5)
   --concurrency-success <n>
@@ -84,6 +84,44 @@ if ! command -v kubectl >/dev/null 2>&1; then
   exit 1
 fi
 
+_duration_to_seconds() {
+  local v="$1"
+  if [[ "${v}" =~ ^[0-9]+$ ]]; then
+    echo "${v}"
+    return 0
+  fi
+  if [[ "${v}" =~ ^([0-9]+)([smh])$ ]]; then
+    local n="${BASH_REMATCH[1]}"
+    local u="${BASH_REMATCH[2]}"
+    case "${u}" in
+      s) echo "${n}";;
+      m) echo "$((n * 60))";;
+      h) echo "$((n * 3600))";;
+    esac
+    return 0
+  fi
+  echo "Invalid --duration '${v}'. Expected: 30s, 5m, 1h" >&2
+  return 1
+}
+
+_require_positive_int() {
+  local name="$1"
+  local value="$2"
+  if ! [[ "${value}" =~ ^[0-9]+$ ]] || [[ "${value}" -le 0 ]]; then
+    echo "Invalid ${name}: '${value}' (must be a positive integer)" >&2
+    exit 2
+  fi
+}
+
+_require_positive_int "--qps-success" "${QPS_SUCCESS}"
+_require_positive_int "--concurrency-success" "${CONCURRENCY_SUCCESS}"
+_require_positive_int "--qps-invalid" "${QPS_INVALID}"
+_require_positive_int "--concurrency-invalid" "${CONCURRENCY_INVALID}"
+_require_positive_int "--qps-health" "${QPS_HEALTH}"
+_require_positive_int "--concurrency-health" "${CONCURRENCY_HEALTH}"
+
+DURATION_SECONDS="$(_duration_to_seconds "${DURATION}")"
+
 # Pick a predictable-but-unique name.
 if [[ -z "${JOB_NAME}" ]]; then
   JOB_NAME="oauth2-traffic-$(date +%Y%m%d%H%M%S)"
@@ -126,57 +164,140 @@ spec:
       restartPolicy: Never
       containers:
         - name: token-success
-          image: rakyll/hey:latest
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh","-c"]
+          env:
+            - name: DURATION_SECONDS
+              value: "${DURATION_SECONDS}"
+            - name: QPS
+              value: "${QPS_SUCCESS}"
+            - name: CONCURRENCY
+              value: "${CONCURRENCY_SUCCESS}"
+            - name: URL
+              value: "${TOKEN_URL}"
+            - name: METHOD
+              value: "POST"
+            - name: CONTENT_TYPE
+              value: "application/x-www-form-urlencoded"
+            - name: BODY
+              value: "${TOKEN_BODY_SUCCESS}"
           args:
-            - "-z"
-            - "${DURATION}"
-            - "-q"
-            - "${QPS_SUCCESS}"
-            - "-c"
-            - "${CONCURRENCY_SUCCESS}"
-            - "-m"
-            - "POST"
-            - "-H"
-            - "Content-Type: application/x-www-form-urlencoded"
-            - "-d"
-            - "${TOKEN_BODY_SUCCESS}"
-            - "${TOKEN_URL}"
+            - |
+              set -euo pipefail
+              : "${DURATION_SECONDS:?}" "${QPS:?}" "${CONCURRENCY:?}" "${URL:?}"
+              if [ "${QPS}" -le 0 ] || [ "${CONCURRENCY}" -le 0 ]; then
+                echo "QPS and CONCURRENCY must be > 0" >&2
+                exit 2
+              fi
+              END=$(( $(date +%s) + DURATION_SECONDS ))
+              # Each worker sends ~QPS/CONCURRENCY requests/sec
+              SLEEP_S=$(awk -v c="${CONCURRENCY}" -v q="${QPS}" 'BEGIN { printf "%.4f", (c / q) }')
+              export END SLEEP_S URL METHOD CONTENT_TYPE BODY
+              echo "Starting load: method=${METHOD} url=${URL} duration=${DURATION_SECONDS}s qps=${QPS} concurrency=${CONCURRENCY} sleep=${SLEEP_S}s"
+              seq 1 "${CONCURRENCY}" | xargs -n1 -P"${CONCURRENCY}" sh -c '
+                while [ "$(date +%s)" -lt "${END}" ]; do
+                  curl -sS -o /dev/null \
+                    --connect-timeout 2 --max-time 5 \
+                    -X "${METHOD}" \
+                    -H "Content-Type: ${CONTENT_TYPE}" \
+                    --data "${BODY}" \
+                    "${URL}" || true
+                  sleep "${SLEEP_S}" || true
+                done
+              '
         - name: token-invalid
-          image: rakyll/hey:latest
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh","-c"]
+          env:
+            - name: DURATION_SECONDS
+              value: "${DURATION_SECONDS}"
+            - name: QPS
+              value: "${QPS_INVALID}"
+            - name: CONCURRENCY
+              value: "${CONCURRENCY_INVALID}"
+            - name: URL
+              value: "${TOKEN_URL}"
+            - name: METHOD
+              value: "POST"
+            - name: CONTENT_TYPE
+              value: "application/x-www-form-urlencoded"
+            - name: BODY
+              value: "${TOKEN_BODY_INVALID}"
           args:
-            - "-z"
-            - "${DURATION}"
-            - "-q"
-            - "${QPS_INVALID}"
-            - "-c"
-            - "${CONCURRENCY_INVALID}"
-            - "-m"
-            - "POST"
-            - "-H"
-            - "Content-Type: application/x-www-form-urlencoded"
-            - "-d"
-            - "${TOKEN_BODY_INVALID}"
-            - "${TOKEN_URL}"
+            - |
+              set -euo pipefail
+              : "${DURATION_SECONDS:?}" "${QPS:?}" "${CONCURRENCY:?}" "${URL:?}"
+              END=$(( $(date +%s) + DURATION_SECONDS ))
+              SLEEP_S=$(awk -v c="${CONCURRENCY}" -v q="${QPS}" 'BEGIN { printf "%.4f", (c / q) }')
+              export END SLEEP_S URL METHOD CONTENT_TYPE BODY
+              echo "Starting load: method=${METHOD} url=${URL} duration=${DURATION_SECONDS}s qps=${QPS} concurrency=${CONCURRENCY} sleep=${SLEEP_S}s"
+              seq 1 "${CONCURRENCY}" | xargs -n1 -P"${CONCURRENCY}" sh -c '
+                while [ "$(date +%s)" -lt "${END}" ]; do
+                  curl -sS -o /dev/null \
+                    --connect-timeout 2 --max-time 5 \
+                    -X "${METHOD}" \
+                    -H "Content-Type: ${CONTENT_TYPE}" \
+                    --data "${BODY}" \
+                    "${URL}" || true
+                  sleep "${SLEEP_S}" || true
+                done
+              '
         - name: health
-          image: rakyll/hey:latest
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh","-c"]
+          env:
+            - name: DURATION_SECONDS
+              value: "${DURATION_SECONDS}"
+            - name: QPS
+              value: "${QPS_HEALTH}"
+            - name: CONCURRENCY
+              value: "${CONCURRENCY_HEALTH}"
+            - name: URL
+              value: "${HEALTH_URL}"
           args:
-            - "-z"
-            - "${DURATION}"
-            - "-q"
-            - "${QPS_HEALTH}"
-            - "-c"
-            - "${CONCURRENCY_HEALTH}"
-            - "${HEALTH_URL}"
+            - |
+              set -euo pipefail
+              : "${DURATION_SECONDS:?}" "${QPS:?}" "${CONCURRENCY:?}" "${URL:?}"
+              END=$(( $(date +%s) + DURATION_SECONDS ))
+              SLEEP_S=$(awk -v c="${CONCURRENCY}" -v q="${QPS}" 'BEGIN { printf "%.4f", (c / q) }')
+              export END SLEEP_S URL
+              echo "Starting load: GET url=${URL} duration=${DURATION_SECONDS}s qps=${QPS} concurrency=${CONCURRENCY} sleep=${SLEEP_S}s"
+              seq 1 "${CONCURRENCY}" | xargs -n1 -P"${CONCURRENCY}" sh -c '
+                while [ "$(date +%s)" -lt "${END}" ]; do
+                  curl -sS -o /dev/null \
+                    --connect-timeout 2 --max-time 5 \
+                    "${URL}" || true
+                  sleep "${SLEEP_S}" || true
+                done
+              '
         - name: ready
-          image: rakyll/hey:latest
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh","-c"]
+          env:
+            - name: DURATION_SECONDS
+              value: "${DURATION_SECONDS}"
+            - name: QPS
+              value: "${QPS_HEALTH}"
+            - name: CONCURRENCY
+              value: "${CONCURRENCY_HEALTH}"
+            - name: URL
+              value: "${READY_URL}"
           args:
-            - "-z"
-            - "${DURATION}"
-            - "-q"
-            - "${QPS_HEALTH}"
-            - "-c"
-            - "${CONCURRENCY_HEALTH}"
-            - "${READY_URL}"
+            - |
+              set -euo pipefail
+              : "${DURATION_SECONDS:?}" "${QPS:?}" "${CONCURRENCY:?}" "${URL:?}"
+              END=$(( $(date +%s) + DURATION_SECONDS ))
+              SLEEP_S=$(awk -v c="${CONCURRENCY}" -v q="${QPS}" 'BEGIN { printf "%.4f", (c / q) }')
+              export END SLEEP_S URL
+              echo "Starting load: GET url=${URL} duration=${DURATION_SECONDS}s qps=${QPS} concurrency=${CONCURRENCY} sleep=${SLEEP_S}s"
+              seq 1 "${CONCURRENCY}" | xargs -n1 -P"${CONCURRENCY}" sh -c '
+                while [ "$(date +%s)" -lt "${END}" ]; do
+                  curl -sS -o /dev/null \
+                    --connect-timeout 2 --max-time 5 \
+                    "${URL}" || true
+                  sleep "${SLEEP_S}" || true
+                done
+              '
 EOF
 
 if [[ "${DETACH}" == "true" ]]; then
