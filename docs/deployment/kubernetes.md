@@ -51,3 +51,13 @@ docker compose -f docker-compose.observability.yml -f docker-compose.observabili
 This uses `observability/prometheus/prometheus.kind.yml`, which scrapes `host.docker.internal:18080`.
 
 > Note: `host.docker.internal` works out of the box on macOS/Windows. On Linux you may need a different host gateway setup.
+
+### Generating demo traffic (for dashboards/SLOs)
+
+To generate synthetic traffic **inside** the cluster (so Prometheus/Grafana have something to show), run:
+
+```bash
+./scripts/kind_generate_traffic.sh --duration 10m
+```
+
+This creates a short-lived Kubernetes Job that hits `POST /oauth/token` (success + invalid secret) and `GET /health`/`GET /ready`.
