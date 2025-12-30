@@ -160,6 +160,30 @@ iframe[src*="swagger"] {
     color: #7aa7ff;
   }
 
+  /* Footer prev/next buttons (RTD uses .btn-neutral with !important light styles). */
+  .rst-footer-buttons .btn,
+  .rst-content .btn {
+    border-color: #0b3a52;
+  }
+
+  .btn-neutral {
+    background: #041a2a !important;
+    color: #e8f7ff !important;
+    border-color: #0b3a52 !important;
+    box-shadow: none;
+  }
+
+  .btn-neutral:hover {
+    background: #0b2f44 !important;
+    color: #eaffff !important;
+  }
+
+  .btn-neutral:focus,
+  .btn-neutral:focus-visible {
+    outline: 2px solid #61d6ff;
+    outline-offset: 2px;
+  }
+
   /* Code blocks and inline code */
   .rst-content pre,
   .rst-content code,
