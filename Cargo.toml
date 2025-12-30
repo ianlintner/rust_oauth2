@@ -67,7 +67,7 @@ prometheus = "0.14"
 # OpenTelemetry
 opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31", features = ["trace", "metrics"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "metrics"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-opentelemetry = "0.32"

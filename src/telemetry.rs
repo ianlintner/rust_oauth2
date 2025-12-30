@@ -64,10 +64,10 @@ pub fn init_telemetry(service_name: &str) -> Result<(), Box<dyn std::error::Erro
         // New OTLP API (opentelemetry-otlp 0.31): build an exporter explicitly and attach it
         // to an SdkTracerProvider.
         //
-        // We default to OTLP/HTTP (enabled by default in opentelemetry-otlp). Endpoint
+        // We default to OTLP/gRPC via tonic (matching the previous implementation). Endpoint
         // selection follows the OTEL_* environment variables.
         let exporter = opentelemetry_otlp::SpanExporter::builder()
-            .with_http()
+            .with_tonic()
             .build()?;
 
         sdktrace::SdkTracerProvider::builder()
