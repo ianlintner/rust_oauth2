@@ -27,6 +27,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Rust (fmt, clippy, test)"
+            echo "Progress updates will appear below as steps complete."
+            echo
+            echo "- ✅ Checkout (1/7)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
@@ -35,19 +44,34 @@ jobs:
           cache-key: ci
           install-system-deps: 'true'
 
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/7)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check Formatting
         run: cargo fmt -- --check
+
+      - name: Job summary
+        run: echo "- ✅ cargo fmt (3/7)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clippy Linting
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Job summary
+        run: echo "- ✅ cargo clippy (4/7)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Tests
         run: cargo test --verbose --all-features --locked
+
+      - name: Job summary
+        run: echo "- ✅ cargo test (5/7)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build release binary (cached)
         run: |
           cargo build --release --locked
           test -f target/release/rust_oauth2_server
+
+      - name: Job summary
+        run: echo "- ✅ cargo build --release (6/7)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release binary artifact
         uses: actions/upload-artifact@v4
@@ -55,6 +79,15 @@ jobs:
           name: rust_oauth2_server-linux-amd64
           path: target/release/rust_oauth2_server
           if-no-files-found: error
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Upload artifact (7/7)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Security Scanning
   security:
@@ -64,6 +97,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Security (audit, deny)"
+            echo "- ✅ Checkout (1/4)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
@@ -71,10 +111,16 @@ jobs:
           cache-key: security
           install-system-deps: 'true'
 
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/4)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install cargo-audit
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
+
+      - name: Job summary
+        run: echo "- ✅ cargo-audit installed (3/4)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Security Audit (cargo-audit)
         continue-on-error: true
@@ -86,6 +132,15 @@ jobs:
         with:
           command: check
 
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ cargo audit + cargo deny completed (4/4)"
+            echo
+            echo "Result: **${{ job.status }}** (continue-on-error: true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Code Coverage
   coverage:
     name: Code Coverage
@@ -95,6 +150,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Code Coverage"
+            echo "- ✅ Checkout (1/4)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
@@ -102,10 +164,16 @@ jobs:
           cache-key: coverage
           install-system-deps: 'true'
 
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/4)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install tarpaulin
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-tarpaulin
+
+      - name: Job summary
+        run: echo "- ✅ cargo-tarpaulin installed (3/4)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Coverage
         run: cargo tarpaulin --out Xml --output-dir ./coverage --all-features --locked
@@ -115,6 +183,15 @@ jobs:
         with:
           files: ./coverage/cobertura.xml
           fail_ci_if_error: false
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Coverage uploaded (4/4)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Integration Tests
   integration:
@@ -138,12 +215,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Integration Tests"
+            echo "- ✅ Checkout (1/4)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
           toolchain: stable
           cache-key: integration
           install-system-deps: 'true'
+
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/4)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Flyway Migrations
         run: |
@@ -157,10 +244,22 @@ jobs:
             -locations=filesystem:/flyway/sql \
             migrate
 
+      - name: Job summary
+        run: echo "- ✅ Flyway migrations applied (3/4)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Integration Tests
         env:
           OAUTH2_DATABASE_URL: postgresql://test_user:test_password@localhost:5432/oauth2_test
         run: cargo test --test integration --locked
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Integration test suite finished (4/4)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   mongo-storage:
     name: Mongo Storage Tests (feature)
@@ -169,6 +268,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Mongo Storage Tests (feature)"
+            echo "- ✅ Checkout (1/3)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
@@ -176,10 +282,22 @@ jobs:
           cache-key: mongo-storage
           install-system-deps: 'true'
 
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/3)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Mongo storage tests (requires Docker)
         env:
           RUN_TESTCONTAINERS: "1"
         run: cargo test --test mongo_storage --features mongo --locked
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Mongo storage tests finished (3/3)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # E2E Tests on KIND (reuses prebuilt binary from the 'ci' job)
   e2e-kind:
@@ -193,17 +311,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## E2E Tests on KIND"
+            echo "- ✅ Checkout (1/8)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download prebuilt server binary
         uses: actions/download-artifact@v4
         with:
           name: rust_oauth2_server-linux-amd64
           path: target/release
 
+      - name: Job summary
+        run: echo "- ✅ Download binary (2/8)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Ensure binary is executable
         run: chmod +x target/release/rust_oauth2_server
 
+      - name: Job summary
+        run: echo "- ✅ Binary prepared (3/8)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Job summary
+        run: echo "- ✅ Docker Buildx ready (4/8)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install KIND
         shell: bash
@@ -215,10 +349,16 @@ jobs:
           sudo mv kind /usr/local/bin/kind
           kind version
 
+      - name: Job summary
+        run: echo "- ✅ KIND installed (5/8)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install kustomize
         run: |
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
+
+      - name: Job summary
+        run: echo "- ✅ kustomize installed (6/8)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enable config debug logging
         run: echo "OAUTH2_DEBUG_CONFIG=1" >> $GITHUB_ENV
@@ -234,6 +374,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Job summary
+        run: echo "- ✅ Docker image built (7/8)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run E2E (shared script)
         shell: bash
         run: |
@@ -246,6 +389,15 @@ jobs:
           NAMESPACE=oauth2-server \
           IMAGE_REF=docker.io/ianlintner068/oauth2-server:test \
           bash scripts/e2e_kind.sh
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ E2E run finished (8/8)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Export cluster logs
         if: failure()
@@ -281,20 +433,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Docker Build & Push"
+            echo "- ✅ Checkout (1/6)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download prebuilt server binary
         uses: actions/download-artifact@v4
         with:
           name: rust_oauth2_server-linux-amd64
           path: target/release
 
+      - name: Job summary
+        run: echo "- ✅ Download binary (2/6)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Ensure binary is executable
         run: chmod +x target/release/rust_oauth2_server
+
+      - name: Job summary
+        run: echo "- ✅ Binary prepared (3/6)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
+      - name: Job summary
+        run: echo "- ✅ Buildx + QEMU ready (4/6)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Decide publishing targets
         id: publish
@@ -379,6 +547,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Image build/push complete (5/6)"
+            echo "- ℹ️  Version: `${{ env.IMAGE_VERSION }}`"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Documentation
   docs:
     name: Build and Deploy Documentation
@@ -394,6 +572,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Documentation (MkDocs + Rustdoc)"
+            echo "- ✅ Checkout (1/6)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rust toolchain + cache
         uses: ./.github/actions/rust-setup
         with:
@@ -401,8 +586,14 @@ jobs:
           cache-key: docs
           install-system-deps: 'true'
 
+      - name: Job summary
+        run: echo "- ✅ Rust toolchain + cache (2/6)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build Rust Docs
         run: cargo doc --no-deps --all-features
+
+      - name: Job summary
+        run: echo "- ✅ Rustdoc built (3/6)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -413,20 +604,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/mkdocs.yml') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-docs.txt', 'mkdocs.yml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install MkDocs
         run: |
-          pip install mkdocs-material
-          pip install mkdocs-mermaid2-plugin
+          python -m pip install --upgrade pip
+          if [ -f requirements-docs.txt ]; then
+            pip install -r requirements-docs.txt
+          else
+            # Fallback: minimal deps for mkdocs.yml (keep in sync with requirements-docs.txt)
+            pip install mkdocs-material mkdocs-mermaid2-plugin
+          fi
+
+      - name: Job summary
+        run: echo "- ✅ MkDocs deps installed (4/6)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build MkDocs
         run: |
           if [ -f mkdocs.yml ]; then
             mkdocs build
           fi
+
+      - name: Job summary
+        run: echo "- ✅ MkDocs site built (5/6)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare docs for deployment
         run: |
@@ -448,6 +650,15 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo "- ✅ Pages deployment step finished (6/6)"
+            echo
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Quality Gate
   gate:
     name: Quality Gate
@@ -455,6 +666,13 @@ jobs:
     needs: [ci, security, integration, mongo-storage, e2e-kind, coverage]
     if: always()
     steps:
+      - name: Job summary (init)
+        run: |
+          {
+            echo "## Quality Gate"
+            echo "This job evaluates results from other jobs."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check Job Results
         run: |
           # Security scan results are informational only
@@ -476,3 +694,18 @@ jobs:
             exit 1
           fi
           echo "Quality gate passed!"
+
+      - name: Job summary (final)
+        if: always()
+        run: |
+          {
+            echo
+            echo "Result: **${{ job.status }}**"
+            echo "\nUpstream results:"
+            echo "- ci: `${{ needs.ci.result }}`"
+            echo "- security: `${{ needs.security.result }}`"
+            echo "- integration: `${{ needs.integration.result }}`"
+            echo "- mongo-storage: `${{ needs.mongo-storage.result }}`"
+            echo "- e2e-kind: `${{ needs.e2e-kind.result }}`"
+            echo "- coverage: `${{ needs.coverage.result }}`"
+          } >> "$GITHUB_STEP_SUMMARY"
