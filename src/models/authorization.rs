@@ -1,5 +1,13 @@
 #![allow(dead_code)]
 
+// Legacy module (not used by the crate).
+//
+// Domain models were extracted into the `oauth2-core` crate and are re-exported from
+// `rust_oauth2_server::models` for backward compatibility.
+//
+// This file is intentionally **not** referenced by `src/models/mod.rs` anymore and
+// is kept only as a migration aid.
+
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;

@@ -1,3 +1,12 @@
+// Legacy module (not used by the crate).
+//
+// The SQLx adapter was extracted into the `oauth2-storage-sqlx` crate.
+// The root crate keeps a backward-compatible module path via `src/storage/mod.rs`:
+// `rust_oauth2_server::storage::sqlx::SqlxStorage`.
+//
+// This file is intentionally **not** referenced by `src/storage/mod.rs` anymore and
+// is kept only as a migration aid.
+
 use crate::models::{AuthorizationCode, Client, OAuth2Error, Token, User};
 use async_trait::async_trait;
 use sqlx::{Pool, Postgres, Sqlite};

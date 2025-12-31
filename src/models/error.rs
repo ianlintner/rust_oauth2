@@ -1,5 +1,13 @@
 #![allow(dead_code)]
 
+// Legacy module (not used by the crate).
+//
+// Errors/domain models were extracted into the `oauth2-core` crate and are re-exported from
+// `rust_oauth2_server::models` for backward compatibility.
+//
+// This file is intentionally **not** referenced by `src/models/mod.rs` anymore and
+// is kept only as a migration aid.
+
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
 use serde::{Deserialize, Serialize};
 use std::fmt;
