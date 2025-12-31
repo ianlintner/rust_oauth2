@@ -3,7 +3,6 @@ use oauth2_core::{AuthorizationCode, Client, OAuth2Error, Token, User};
 use oauth2_ports::Storage;
 use sqlx::{Pool, Postgres, Sqlite};
 use std::borrow::Cow;
-use std::path::Path;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -533,41 +532,6 @@ impl Storage for SqlxStorage {
 
         Ok(())
     }
-}
-
-fn sqlite_parent_dir(database_url: &str) -> Option<&Path> {
-    // sqlx accepts connection strings like:
-    // - sqlite::memory:
-    // - sqlite:oauth2.db
-    // - sqlite:/app/data/oauth2.db
-    // - sqlite:///app/data/oauth2.db
-    // Potentially with query params appended.
-    if !database_url.starts_with("sqlite:") {
-        return None;
-    }
-    if database_url.starts_with("sqlite::memory:") {
-        return None;
-    }
-
-    let mut rest = &database_url["sqlite:".len()..];
-
-    // Normalize URL-ish forms into a filesystem-ish path by reducing multiple
-    // leading slashes to a single leading slash.
-    // - "///app/data/x.db" -> "/app/data/x.db"
-    // - "//app/data/x.db"  -> "/app/data/x.db" (rare, but keep consistent)
-    if rest.starts_with("///") {
-        rest = &rest[2..];
-    } else if rest.starts_with("//") {
-        rest = &rest[1..];
-    }
-
-    // Drop any query string.
-    let path_part = rest.split('?').next().unwrap_or(rest);
-    if path_part.is_empty() {
-        return None;
-    }
-
-    Path::new(path_part).parent()
 }
 
 fn sqlite_db_path(database_url: &str) -> Option<PathBuf> {
