@@ -5,14 +5,6 @@
 
 pub use oauth2_actix::actors::*;
 
-pub mod auth_actor {
-	pub use oauth2_actix::actors::auth_actor::*;
-}
-
-pub mod client_actor {
-	pub use oauth2_actix::actors::client_actor::*;
-}
-
-pub mod token_actor {
-	pub use oauth2_actix::actors::token_actor::*;
-}
+pub mod auth_actor;
+pub mod client_actor;
+pub mod token_actor;

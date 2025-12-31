@@ -1,3 +1,8 @@
+// Compatibility facade.
+//
+// The actor implementations were extracted to `oauth2-actix`. This file exists
+// only to preserve the legacy module path `rust_oauth2_server::actors::token_actor::*`.
+pub use oauth2_actix::actors::token_actor::*;
 use crate::events::{AuthEvent, EventBusHandle, EventEnvelope, EventSeverity, EventType};
 use crate::models::{Claims, OAuth2Error, Token};
 use crate::storage::DynStorage;
