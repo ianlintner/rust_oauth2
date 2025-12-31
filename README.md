@@ -52,11 +52,17 @@ Reusable crates live under `crates/`:
 - `oauth2-core`: framework-agnostic domain types (e.g. `Client`, `Token`, `AuthorizationCode`, `OAuth2Error`)
 - `oauth2-ports`: integration traits (e.g. `Storage`) that your DAO implements
 - `oauth2-storage-sqlx`: a reference SQLx adapter (SQLite/Postgres)
+- `oauth2-storage-factory`: backend selection (`sqlx://` vs `mongodb://`) + `ObservedStorage` wrapping
+- `oauth2-actix`: Actix-web HTTP handlers + Actix actors (framework layer)
+- `oauth2-observability`: tracing/metrics/OpenTelemetry helpers + Actix middleware
+- `oauth2-events`: auth event types + pluggable event backends
+- `oauth2-server`: the runnable server assembly (what used to live in `src/main.rs`)
 
 ### Using a custom DAO
 
 Implement `oauth2_ports::Storage` in your own crate, then wire it into the server components you use.
-The main server crate also re-exports these crates for convenience:
+The root crate (`rust_oauth2_server`) is an **umbrella** that keeps older import paths working and re-exports
+the main building blocks for convenience:
 
 - `rust_oauth2_server::core` (re-export of `oauth2-core`)
 - `rust_oauth2_server::ports` (re-export of `oauth2-ports`)
