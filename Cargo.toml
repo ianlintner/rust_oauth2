@@ -65,8 +65,6 @@ log = "0.4"
 validator = { version = "0.20", features = ["derive"] }
 
 # Database (SQLite for simplicity, can be extended)
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "macros", "migrate"] }
-
 
 
 # OpenAPI
@@ -131,6 +129,9 @@ futures = "0.3"
 tempfile = "3"
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["postgres", "mongo"] }
+
+# Used by integration tests (e.g., migrations and SQL-level assertions).
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "macros", "migrate"] }
 
 [[test]]
 name = "bdd"
