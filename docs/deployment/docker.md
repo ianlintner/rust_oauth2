@@ -2,6 +2,12 @@
 
 This guide covers deploying the Rust OAuth2 Server using Docker and Docker Compose.
 
+## Prebuilt image (Docker Hub)
+
+If you want to run the server **without compiling**, use the prebuilt Docker Hub image.
+
+See: [Docker Hub Image](dockerhub.md)
+
 ## Quick Start
 
 The fastest way to get started with Docker:
@@ -25,30 +31,30 @@ graph TB
         subgraph OAuth2Service[OAuth2 Service]
             OAuth2[OAuth2 Server Container]
         end
-        
+
         subgraph DatabaseService[Database Service]
             DB[(PostgreSQL Container)]
         end
-        
+
         subgraph Observability
             Jaeger[Jaeger Container]
             Prometheus[Prometheus Container]
         end
-        
+
         subgraph Networks
             AppNet[app-network]
         end
     end
-    
+
     OAuth2 --> DB
     OAuth2 --> Jaeger
     Prometheus --> OAuth2
-    
+
     AppNet -.-> OAuth2
     AppNet -.-> DB
     AppNet -.-> Jaeger
     AppNet -.-> Prometheus
-    
+
     style OAuth2 fill:#ff9800,color:#fff
     style DB fill:#f3e5f5
     style Jaeger fill:#fff9c4
@@ -138,7 +144,7 @@ CMD ["./rust_oauth2_server"]
 Create `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   oauth2_server:
@@ -158,7 +164,7 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-  
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -189,7 +195,7 @@ volumes:
 Complete setup with monitoring:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   oauth2_server:
@@ -210,7 +216,7 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-  
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -227,18 +233,18 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-  
+
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "4317:4317"    # OTLP gRPC
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     networks:
       - app-network
     restart: unless-stopped
-  
+
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -247,12 +253,12 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
     networks:
       - app-network
     restart: unless-stopped
-  
+
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -285,10 +291,10 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'oauth2_server'
+  - job_name: "oauth2_server"
     static_configs:
-      - targets: ['oauth2_server:8080']
-    metrics_path: '/metrics'
+      - targets: ["oauth2_server:8080"]
+    metrics_path: "/metrics"
 ```
 
 ## Environment Variables
@@ -354,7 +360,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-  
+
   oauth2_server:
     # ...
     depends_on:
@@ -462,7 +468,7 @@ Volumes ensure data persists across container restarts:
 volumes:
   postgres_data:
     driver: local
-  
+
   # Or use named volume with specific driver
   postgres_data:
     driver: local
@@ -480,8 +486,8 @@ volumes:
 services:
   oauth2_server:
     ports:
-      - "8080:8080"        # host:container
-      - "127.0.0.1:8080:8080"  # bind to localhost only
+      - "8080:8080" # host:container
+      - "127.0.0.1:8080:8080" # bind to localhost only
 ```
 
 ### Custom Network
@@ -498,7 +504,7 @@ services:
     networks:
       - frontend
       - backend
-  
+
   postgres:
     networks:
       - backend
@@ -528,7 +534,7 @@ CMD ["./rust_oauth2_server"]
 Use Docker secrets:
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   oauth2_server:
@@ -566,7 +572,7 @@ services:
       - oauth2_server
     networks:
       - app-network
-  
+
   oauth2_server:
     # No ports exposed directly
     expose:
@@ -583,10 +589,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 ```
 
