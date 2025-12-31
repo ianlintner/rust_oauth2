@@ -130,10 +130,10 @@ Edit `base/ingress.yaml` to configure your domain:
 spec:
   tls:
     - hosts:
-        - oauth.your-domain.com  # Change this
+        - oauth.your-domain.com # Change this
       secretName: oauth2-server-tls
   rules:
-    - host: oauth.your-domain.com  # Change this
+    - host: oauth.your-domain.com # Change this
 ```
 
 ### Resource Limits
@@ -391,19 +391,23 @@ kubectl delete namespace oauth2-server-staging
 ## Security Best Practices
 
 1. **Secrets Management**
+
    - Never commit real secrets to version control
    - Use external secret management (e.g., HashiCorp Vault, AWS Secrets Manager)
    - Rotate secrets regularly
 
 2. **Network Policies**
+
    - Implement network policies to restrict pod-to-pod communication
    - Only allow necessary ingress/egress traffic
 
 3. **RBAC**
+
    - Follow principle of least privilege
    - Use service accounts with minimal permissions
 
 4. **TLS**
+
    - Always use TLS in production
    - Configure cert-manager for automatic certificate renewal
 
