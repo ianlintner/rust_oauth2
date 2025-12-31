@@ -36,6 +36,10 @@ oauth2-social-login = { path = "crates/oauth2-social-login" }
 oauth2-server = { path = "crates/oauth2-server" }
 oauth2-storage-factory = { path = "crates/oauth2-storage-factory" }
 
+# Used by `src/bin/export_openapi.rs`.
+serde_json = "1.0"
+utoipa = "5"
+
 # Runtime used only by the thin delegating binary (`src/main.rs`).
 actix-rt = "2.9"
 
@@ -48,10 +52,6 @@ mongo = ["oauth2-server/mongo", "oauth2-storage-factory/mongo"]
 events-redis = ["oauth2-events/events-redis", "oauth2-server/events-redis"]
 events-kafka = ["oauth2-events/events-kafka", "oauth2-server/events-kafka"]
 events-rabbit = ["oauth2-events/events-rabbit", "oauth2-server/events-rabbit"]
-
-[lib]
-name = "rust_oauth2_server"
-path = "src/lib.rs"
 
 [dev-dependencies]
 # Testing
