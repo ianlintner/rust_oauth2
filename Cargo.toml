@@ -12,10 +12,13 @@ members = [
 	"crates/oauth2-actix",
 	"crates/oauth2-config",
 	"crates/oauth2-core",
+	"crates/oauth2-server",
+	"crates/oauth2-storage-factory",
 	"crates/oauth2-openapi",
 	"crates/oauth2-observability",
 	"crates/oauth2-events",
 	"crates/oauth2-ports",
+	"crates/oauth2-social-login",
 	"crates/oauth2-storage-mongo",
 	"crates/oauth2-storage-sqlx",
 ]
@@ -29,8 +32,9 @@ oauth2-events = { path = "crates/oauth2-events" }
 oauth2-openapi = { path = "crates/oauth2-openapi" }
 oauth2-observability = { path = "crates/oauth2-observability", features = ["actix"] }
 oauth2-ports = { path = "crates/oauth2-ports" }
-oauth2-storage-mongo = { path = "crates/oauth2-storage-mongo", optional = true }
-oauth2-storage-sqlx = { path = "crates/oauth2-storage-sqlx" }
+oauth2-social-login = { path = "crates/oauth2-social-login" }
+oauth2-server = { path = "crates/oauth2-server" }
+oauth2-storage-factory = { path = "crates/oauth2-storage-factory" }
 
 # Actix Web Framework
 actix-web = "4.4"
@@ -109,12 +113,12 @@ serde_urlencoded = "0.7"
 [features]
 # Keep the default build lightweight: SQL backends only.
 default = []
-mongo = ["oauth2-storage-mongo"]
+mongo = ["oauth2-server/mongo", "oauth2-storage-factory/mongo"]
 
 # Optional eventing backends (Phase 1 best-effort)
-events-redis = ["oauth2-events/events-redis"]
-events-kafka = ["oauth2-events/events-kafka"]
-events-rabbit = ["oauth2-events/events-rabbit"]
+events-redis = ["oauth2-events/events-redis", "oauth2-server/events-redis"]
+events-kafka = ["oauth2-events/events-kafka", "oauth2-server/events-kafka"]
+events-rabbit = ["oauth2-events/events-rabbit", "oauth2-server/events-rabbit"]
 
 [lib]
 name = "rust_oauth2_server"

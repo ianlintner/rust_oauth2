@@ -1,7 +1,7 @@
 // Compatibility facade.
 //
 // Most HTTP handlers were extracted to `oauth2-actix`.
-// We keep `auth` local for now because it depends on server-specific social-login config.
+// Social-login handlers live in `oauth2-social-login` but remain available here via a facade.
 
 pub mod admin {
 	pub use oauth2_actix::handlers::admin::*;

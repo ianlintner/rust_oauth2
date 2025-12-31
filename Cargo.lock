@@ -3894,7 +3894,10 @@ name = "oauth2-observability"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "async-trait",
  "futures",
+ "oauth2-core",
+ "oauth2-ports",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
@@ -3919,6 +3922,57 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "oauth2-core",
+]
+
+[[package]]
+name = "oauth2-server"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-cors",
+ "actix-files",
+ "actix-session",
+ "actix-web",
+ "env_logger",
+ "hex",
+ "oauth2-actix",
+ "oauth2-config",
+ "oauth2-events",
+ "oauth2-observability",
+ "oauth2-openapi",
+ "oauth2-social-login",
+ "oauth2-storage-factory",
+ "serde_json",
+ "tracing",
+ "tracing-actix-web",
+ "utoipa",
+ "utoipa-swagger-ui",
+]
+
+[[package]]
+name = "oauth2-social-login"
+version = "0.0.0"
+dependencies = [
+ "actix-session",
+ "actix-web",
+ "oauth2",
+ "oauth2-config",
+ "oauth2-core",
+ "reqwest 0.12.28",
+ "reqwest 0.13.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oauth2-storage-factory"
+version = "0.1.0"
+dependencies = [
+ "oauth2-core",
+ "oauth2-observability",
+ "oauth2-ports",
+ "oauth2-storage-mongo",
+ "oauth2-storage-sqlx",
 ]
 
 [[package]]
@@ -5223,8 +5277,9 @@ dependencies = [
  "oauth2-observability",
  "oauth2-openapi",
  "oauth2-ports",
- "oauth2-storage-mongo",
- "oauth2-storage-sqlx",
+ "oauth2-server",
+ "oauth2-social-login",
+ "oauth2-storage-factory",
  "rand 0.9.2",
  "reqwest 0.12.28",
  "reqwest 0.13.1",

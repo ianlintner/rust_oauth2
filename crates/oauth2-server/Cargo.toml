@@ -1,0 +1,47 @@
+[package]
+name = "oauth2-server"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+description = "Runnable OAuth2 server binary assembly built from extracted crates"
+
+[dependencies]
+# Extracted crates
+oauth2-actix = { path = "../oauth2-actix" }
+oauth2-config = { path = "../oauth2-config" }
+oauth2-events = { path = "../oauth2-events" }
+oauth2-observability = { path = "../oauth2-observability", features = ["actix"] }
+oauth2-openapi = { path = "../oauth2-openapi" }
+oauth2-social-login = { path = "../oauth2-social-login" }
+oauth2-storage-factory = { path = "../oauth2-storage-factory" }
+
+# Actix runtime + web
+actix-web = "4.4"
+actix = "0.13"
+actix-cors = "0.7"
+actix-files = "0.6"
+actix-session = { version = "0.11", features = ["cookie-session"] }
+
+# OpenAPI UI
+utoipa = "5.4"
+utoipa-swagger-ui = { version = "9.0", features = ["actix-web"] }
+
+# Observability
+tracing = "0.1"
+tracing-actix-web = "0.7"
+
+# Misc
+serde_json = "1.0"
+env_logger = "0.11"
+hex = "0.4"
+
+[features]
+default = []
+
+mongo = ["oauth2-storage-factory/mongo"]
+
+# Optional eventing backends (pass-through to oauth2-events)
+events-redis = ["oauth2-events/events-redis"]
+events-kafka = ["oauth2-events/events-kafka"]
+events-rabbit = ["oauth2-events/events-rabbit"]

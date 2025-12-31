@@ -1,10 +1,12 @@
 pub mod metrics;
+pub mod storage;
 pub mod telemetry;
 
 #[cfg(feature = "actix")]
 pub mod actix;
 
 pub use metrics::Metrics;
+pub use storage::ObservedStorage;
 pub use telemetry::{annotate_span_with_trace_ids, init_telemetry, shutdown_telemetry};
 
 /// Encode a Prometheus registry into the text exposition format ("version=0.0.4").

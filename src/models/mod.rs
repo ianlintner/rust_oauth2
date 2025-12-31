@@ -4,6 +4,8 @@
 // on them without pulling in the whole server.
 pub use oauth2_core::*;
 
-// App-specific types (depend on server config/env) stay in this crate.
-pub mod social;
-pub use social::*;
+// App-specific types.
+//
+// Social-login types were extracted to `oauth2-social-login` and `oauth2-config`.
+pub use oauth2_config::ProviderConfig;
+pub use oauth2_social_login::{SocialLoginConfig, SocialUserInfo};

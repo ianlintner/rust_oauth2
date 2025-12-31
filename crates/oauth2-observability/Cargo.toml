@@ -11,6 +11,12 @@ default = []
 actix = ["dep:actix-web", "dep:futures"]
 
 [dependencies]
+async-trait = "0.1"
+
+# Core domain + ports
+oauth2-core = { path = "../oauth2-core" }
+oauth2-ports = { path = "../oauth2-ports" }
+
 # Metrics
 prometheus = "0.14"
 
