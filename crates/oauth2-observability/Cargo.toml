@@ -1,0 +1,34 @@
+[package]
+name = "oauth2-observability"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Observability helpers (metrics + telemetry) for rust-oauth2-server"
+repository = "https://github.com/ianlintner/rust_oauth2_server"
+
+[features]
+default = []
+actix = ["dep:actix-web", "dep:futures"]
+
+[dependencies]
+async-trait = "0.1"
+
+# Core domain + ports
+oauth2-core = { path = "../oauth2-core" }
+oauth2-ports = { path = "../oauth2-ports" }
+
+# Metrics
+prometheus = "0.14"
+
+# Tracing / OpenTelemetry
+opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "metrics"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.32"
+tracing-log = "0.2"
+
+# Actix integration (optional)
+actix-web = { version = "4.4", optional = true }
+futures = { version = "0.3", optional = true }

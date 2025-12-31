@@ -42,6 +42,31 @@ graph LR
 - 💾 **Database Support** (SQLite/PostgreSQL via SQLx, optional MongoDB via `--features mongo`)
 - 🗄️ **Flyway Migrations** for database schema management
 
+## 🧩 Modular crates (bring your own DAO)
+
+This repository is a Cargo **workspace**. The goal is that you can reuse the OAuth2 domain types and
+integrate your own persistence layer (DAO) **without forking**.
+
+Reusable crates live under `crates/`:
+
+- `oauth2-core`: framework-agnostic domain types (e.g. `Client`, `Token`, `AuthorizationCode`, `OAuth2Error`)
+- `oauth2-ports`: integration traits (e.g. `Storage`) that your DAO implements
+- `oauth2-storage-sqlx`: a reference SQLx adapter (SQLite/Postgres)
+- `oauth2-storage-factory`: backend selection (`sqlx://` vs `mongodb://`) + `ObservedStorage` wrapping
+- `oauth2-actix`: Actix-web HTTP handlers + Actix actors (framework layer)
+- `oauth2-observability`: tracing/metrics/OpenTelemetry helpers + Actix middleware
+- `oauth2-events`: auth event types + pluggable event backends
+- `oauth2-server`: the runnable server assembly (what used to live in `src/main.rs`)
+
+### Using a custom DAO
+
+Implement `oauth2_ports::Storage` in your own crate, then wire it into the server components you use.
+The root crate (`rust_oauth2_server`) is an **umbrella** that keeps older import paths working and re-exports
+the main building blocks for convenience:
+
+- `rust_oauth2_server::core` (re-export of `oauth2-core`)
+- `rust_oauth2_server::ports` (re-export of `oauth2-ports`)
+
 ### Authentication Eventing (NEW! ✨)
 
 - 📡 **Comprehensive Event System** - Emit events for all auth operations
@@ -262,7 +287,7 @@ server {
 # Database Configuration
 database {
   # SQLite (default)
-  url = "sqlite:oauth2.db"
+  url = "sqlite:oauth2.db?mode=rwc"
 
   # PostgreSQL
   # url = "postgresql://oauth2_user:password@localhost:5432/oauth2"
@@ -287,7 +312,7 @@ jwt {
 ```bash
 export OAUTH2_SERVER_HOST=127.0.0.1
 export OAUTH2_SERVER_PORT=8080
-export OAUTH2_DATABASE_URL=sqlite:oauth2.db
+export OAUTH2_DATABASE_URL=sqlite:oauth2.db?mode=rwc
 export OAUTH2_JWT_SECRET=your-secret-key-change-in-production
 ```
 

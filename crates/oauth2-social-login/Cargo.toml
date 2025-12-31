@@ -1,0 +1,22 @@
+[package]
+name = "oauth2-social-login"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+oauth2-core = { path = "../oauth2-core" }
+oauth2-config = { path = "../oauth2-config" }
+
+# Actix integration (handlers)
+actix-web = "4.4"
+actix-session = { version = "0.11", features = ["cookie-session"] }
+
+# OAuth2 + HTTP
+oauth2 = "5.0"
+reqwest = { version = "0.13", features = ["json"] }
+oauth2_reqwest = { package = "reqwest", version = "0.12", features = ["rustls-tls"] }
+
+# Serde
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

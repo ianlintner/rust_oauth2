@@ -1,125 +1,82 @@
 [package]
 name = "rust_oauth2_server"
-version = "0.1.0"
+version = "0.0.4"
 edition = "2021"
+autolib = false
 authors = ["Ian Lintner"]
 description = "A complete OAuth2 server implementation using Actix-web and the actor model"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ianlintner/rust_oauth2_server"
 
+[workspace]
+members = [
+	"crates/oauth2-actix",
+	"crates/oauth2-config",
+	"crates/oauth2-core",
+	"crates/oauth2-server",
+	"crates/oauth2-storage-factory",
+	"crates/oauth2-openapi",
+	"crates/oauth2-observability",
+	"crates/oauth2-events",
+	"crates/oauth2-ports",
+	"crates/oauth2-social-login",
+	"crates/oauth2-storage-mongo",
+	"crates/oauth2-storage-sqlx",
+]
+
 [dependencies]
-# Actix Web Framework
-actix-web = "4.4"
-actix-rt = "2.9"
-actix = "0.13"
+# Extracted reusable crates
+oauth2-actix = { path = "crates/oauth2-actix" }
+oauth2-config = { path = "crates/oauth2-config" }
+oauth2-core = { path = "crates/oauth2-core", features = ["actix", "sqlx", "openapi"] }
+oauth2-events = { path = "crates/oauth2-events" }
+oauth2-openapi = { path = "crates/oauth2-openapi" }
+oauth2-observability = { path = "crates/oauth2-observability", features = ["actix"] }
+oauth2-ports = { path = "crates/oauth2-ports" }
+oauth2-social-login = { path = "crates/oauth2-social-login" }
+oauth2-server = { path = "crates/oauth2-server" }
+oauth2-storage-factory = { path = "crates/oauth2-storage-factory" }
 
-# Async runtime
-tokio = { version = "1.35", features = ["full"] }
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
+# Used by `src/bin/export_openapi.rs`.
 serde_json = "1.0"
+utoipa = "5"
 
-# JWT handling
-jsonwebtoken = { version = "10.2", features = ["rust_crypto"] }
-
-# Cryptography
-rand = "0.9"
-sha2 = "0.10"
-base64 = "0.22"
-argon2 = "0.5"
-subtle = "2.5"
-hex = "0.4"
-
-# UUID generation
-uuid = { version = "1.6", features = ["v4", "serde"] }
-
-# Time handling
-chrono = { version = "0.4", features = ["serde"] }
-
-# Configuration
-config = "0.15"
-hocon = "0.9"
-
-# Logging
-env_logger = "0.11"
-log = "0.4"
-
-# Validation
-validator = { version = "0.20", features = ["derive"] }
-
-# Database (SQLite for simplicity, can be extended)
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "macros", "migrate"] }
-
-# Optional MongoDB backend (enabled with `--features mongo`)
-mongodb = { version = "2.8", optional = true }
-
-# OpenAPI
-utoipa = { version = "5.4", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "9.0", features = ["actix-web"] }
-
-# CORS
-actix-cors = "0.7"
-
-# Metrics and Observability
-prometheus = "0.14"
-
-# OpenTelemetry
-opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "metrics"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.32"
-tracing-actix-web = "0.7"
-tracing-log = "0.2"
-
-# Async utilities
-futures = "0.3"
-async-trait = "0.1"
-
-# Optional eventing backends
-redis = { version = "0.25", optional = true, features = ["tokio-comp", "connection-manager"] }
-rdkafka = { version = "0.38", optional = true }
-lapin = { version = "2.5", optional = true, default-features = false, features = ["rustls"] }
-
-# Admin UI templating
-tera = "1.19"
-actix-files = "0.6"
-
-# Session management
-actix-session = { version = "0.11", features = ["cookie-session"] }
-
-# OAuth2 client for social logins
-oauth2 = "5.0"
-reqwest = { version = "0.13", features = ["json"] }
-oauth2_reqwest = { package = "reqwest", version = "0.12", features = ["rustls-tls"] }
-
-# Additional serialization
-serde_urlencoded = "0.7"
+# Runtime used only by the thin delegating binary (`src/main.rs`).
+actix-rt = "2.9"
 
 [features]
 # Keep the default build lightweight: SQL backends only.
 default = []
-mongo = ["mongodb"]
+mongo = ["oauth2-server/mongo", "oauth2-storage-factory/mongo"]
 
 # Optional eventing backends (Phase 1 best-effort)
-events-redis = ["dep:redis"]
-events-kafka = ["dep:rdkafka"]
-events-rabbit = ["dep:lapin"]
-
-[lib]
-name = "rust_oauth2_server"
-path = "src/lib.rs"
+events-redis = ["oauth2-events/events-redis", "oauth2-server/events-redis"]
+events-kafka = ["oauth2-events/events-kafka", "oauth2-server/events-kafka"]
+events-rabbit = ["oauth2-events/events-rabbit", "oauth2-server/events-rabbit"]
 
 [dev-dependencies]
 # Testing
 actix-rt = "2.9"
+actix-web = "4.4"
+tokio = { version = "1.35", features = ["full"] }
 cucumber = { version = "0.22", features = ["macros"] }
 futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
+sha2 = "0.10"
 tempfile = "3"
 testcontainers = "0.26"
 testcontainers-modules = { version = "0.14", features = ["postgres", "mongo"] }
+
+# Workspace crates used directly by root integration tests.
+oauth2-storage-sqlx = { path = "crates/oauth2-storage-sqlx" }
+oauth2-storage-mongo = { path = "crates/oauth2-storage-mongo" }
+
+# Used by integration tests (e.g., migrations and SQL-level assertions).
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "macros", "migrate"] }
 
 [[test]]
 name = "bdd"

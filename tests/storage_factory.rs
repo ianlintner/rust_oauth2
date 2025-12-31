@@ -5,8 +5,7 @@ async fn storage_factory_rejects_mongo_without_feature() {
     #[cfg(not(feature = "mongo"))]
     {
         let result =
-            rust_oauth2_server::storage::create_storage("mongodb://localhost:27017/oauth2_test")
-                .await;
+            oauth2_storage_factory::create_storage("mongodb://localhost:27017/oauth2_test").await;
 
         assert!(
             result.is_err(),
