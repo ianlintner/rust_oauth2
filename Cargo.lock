@@ -3821,6 +3821,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "oauth2-core"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "base64 0.22.1",
+ "chrono",
+ "jsonwebtoken",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "oauth2-ports"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "oauth2-core",
+]
+
+[[package]]
+name = "oauth2-storage-sqlx"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "oauth2-core",
+ "oauth2-ports",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "oid-registry"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5095,6 +5130,9 @@ dependencies = [
  "log",
  "mongodb",
  "oauth2",
+ "oauth2-core",
+ "oauth2-ports",
+ "oauth2-storage-sqlx",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
