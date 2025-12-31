@@ -95,7 +95,11 @@ impl InMemoryEventLogger {
     #[allow(dead_code)]
     pub fn get_recent_events(&self, limit: usize) -> Vec<EventEnvelope> {
         let events = self.events.read().unwrap();
-        let start = if events.len() > limit { events.len() - limit } else { 0 };
+        let start = if events.len() > limit {
+            events.len() - limit
+        } else {
+            0
+        };
         events[start..].to_vec()
     }
 
@@ -170,7 +174,8 @@ mod tests {
 
     #[test]
     fn test_event_filter_include_only() {
-        let filter = EventFilter::include_only(vec![EventType::TokenCreated, EventType::TokenRevoked]);
+        let filter =
+            EventFilter::include_only(vec![EventType::TokenCreated, EventType::TokenRevoked]);
 
         assert!(filter.should_emit(&EventType::TokenCreated));
         assert!(filter.should_emit(&EventType::TokenRevoked));

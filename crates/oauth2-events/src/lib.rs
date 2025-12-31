@@ -12,5 +12,9 @@ pub use envelope::*;
 pub use event_types::*;
 pub use plugins::*;
 
-#[cfg(any(feature = "events-redis", feature = "events-kafka", feature = "events-rabbit"))]
+#[cfg(any(
+    feature = "events-redis",
+    feature = "events-kafka",
+    feature = "events-rabbit"
+))]
 pub use backends::*;

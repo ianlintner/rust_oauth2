@@ -81,7 +81,10 @@ impl MongoStorage {
 
         // users.email non-unique index
         self.users
-            .create_index(IndexModel::builder().keys(doc! { "email": 1 }).build(), None)
+            .create_index(
+                IndexModel::builder().keys(doc! { "email": 1 }).build(),
+                None,
+            )
             .await
             .map_err(Self::mongo_err_to_oauth)?;
 

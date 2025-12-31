@@ -124,12 +124,16 @@ impl SqlxStorage {
         .execute(pool)
         .await?;
 
-        sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_tokens_access_token ON tokens(access_token);"#)
-            .execute(pool)
-            .await?;
-        sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_tokens_refresh_token ON tokens(refresh_token);"#)
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            r#"CREATE INDEX IF NOT EXISTS idx_tokens_access_token ON tokens(access_token);"#,
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query(
+            r#"CREATE INDEX IF NOT EXISTS idx_tokens_refresh_token ON tokens(refresh_token);"#,
+        )
+        .execute(pool)
+        .await?;
         sqlx::query(r#"CREATE INDEX IF NOT EXISTS idx_tokens_client_id ON tokens(client_id);"#)
             .execute(pool)
             .await?;
