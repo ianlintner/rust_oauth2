@@ -17,7 +17,7 @@ graph LR
     C[Services] -->|OAuth2| S
     S -->|Issues| T[JWT Tokens]
     T -->|Authorize| API[Protected APIs]
-    
+
     style S fill:#ff9800,color:#fff
     style T fill:#4caf50,color:#fff
 ```
@@ -144,6 +144,13 @@ cargo run --release
 docker-compose up -d
 ```
 
+### Using the prebuilt Docker image (no compile)
+
+If you want to run the server **without compiling**, use the prebuilt image on Docker Hub.
+
+- Docker Hub page content: `DOCKERHUB.md`
+- Docs page: `docs/deployment/dockerhub.md`
+
 ### Using Kubernetes
 
 Deploy to Kubernetes using Kustomize:
@@ -216,8 +223,9 @@ See [MCP Server Documentation](mcp-server/README.md) for more details.
 ## 🔧 Configuration
 
 The OAuth2 server uses **HOCON** (Human-Optimized Config Object Notation) for configuration, providing a human-readable format with powerful features like:
+
 - Comments and documentation within config files
-- Nested configuration structures  
+- Nested configuration structures
 - Environment variable substitution with `${?VAR}` syntax
 - Value composition and inheritance
 - Fallback to environment variables for backward compatibility
@@ -255,13 +263,13 @@ server {
 database {
   # SQLite (default)
   url = "sqlite:oauth2.db"
-  
+
   # PostgreSQL
   # url = "postgresql://oauth2_user:password@localhost:5432/oauth2"
-  
+
   # MongoDB (requires building with --features mongo)
   # url = "mongodb://localhost:27017/oauth2"
-  
+
   # Override with OAUTH2_DATABASE_URL
 }
 
@@ -294,21 +302,21 @@ events {
   enabled = true                    # Override with OAUTH2_EVENTS_ENABLED
   backend = "in_memory"             # Override with OAUTH2_EVENTS_BACKEND
   filter_mode = "allow_all"         # Override with OAUTH2_EVENTS_FILTER_MODE
-  
+
   # Redis Streams backend (requires --features events-redis)
   redis {
     url = "redis://127.0.0.1:6379"
     stream = "oauth2_events"
     maxlen = null                   # Optional max length
   }
-  
+
   # Kafka backend (requires --features events-kafka)
   kafka {
     brokers = "127.0.0.1:9092"
     topic = "oauth2_events"
     client_id = null                # Optional client ID
   }
-  
+
   # RabbitMQ backend (requires --features events-rabbit)
   rabbit {
     url = "amqp://127.0.0.1:5672/%2f"
@@ -366,7 +374,7 @@ social {
     # OAUTH2_GOOGLE_CLIENT_SECRET
     # OAUTH2_GOOGLE_REDIRECT_URI
   }
-  
+
   microsoft {
     enabled = false
     # OAUTH2_MICROSOFT_CLIENT_ID
@@ -374,14 +382,14 @@ social {
     # OAUTH2_MICROSOFT_REDIRECT_URI
     # OAUTH2_MICROSOFT_TENANT_ID (optional, defaults to "common")
   }
-  
+
   github {
     enabled = false
     # OAUTH2_GITHUB_CLIENT_ID
     # OAUTH2_GITHUB_CLIENT_SECRET
     # OAUTH2_GITHUB_REDIRECT_URI
   }
-  
+
   okta {
     enabled = false
     # OAUTH2_OKTA_CLIENT_ID
@@ -389,7 +397,7 @@ social {
     # OAUTH2_OKTA_REDIRECT_URI
     # OAUTH2_OKTA_DOMAIN (required)
   }
-  
+
   auth0 {
     enabled = false
     # OAUTH2_AUTH0_CLIENT_ID
@@ -597,49 +605,49 @@ graph TB
         Client2[Mobile Apps]
         Client3[Services]
     end
-    
+
     subgraph "OAuth2 Server"
         LB[Load Balancer]
         MW[Middleware Stack]
-        
+
         subgraph "Handlers"
             OAuth[OAuth Handler]
             Token[Token Handler]
             ClientH[Client Handler]
         end
-        
+
         subgraph "Actor System"
             TokenA[Token Actor]
             ClientA[Client Actor]
             AuthA[Auth Actor]
         end
     end
-    
+
     subgraph "Data & Observability"
         DB[(Database)]
         Metrics[Prometheus]
         Traces[Jaeger]
     end
-    
+
     Client1 --> LB
     Client2 --> LB
     Client3 --> LB
-    
+
     LB --> MW
     MW --> OAuth
     MW --> Token
     MW --> ClientH
-    
+
     OAuth --> AuthA
     Token --> TokenA
     ClientH --> ClientA
-    
+
     TokenA --> DB
     ClientA --> DB
     AuthA --> DB
     MW --> Metrics
     MW --> Traces
-    
+
     style LB fill:#ff9800,color:#fff
     style TokenA fill:#4caf50,color:#fff
     style ClientA fill:#2196f3,color:#fff
@@ -650,7 +658,7 @@ graph TB
 ### Key Components
 
 - **Actix-Web Server**: High-performance async HTTP server
-- **Actor Model**: Isolated, concurrent request processing  
+- **Actor Model**: Isolated, concurrent request processing
 - **SQLx Database**: Compile-time verified queries
 - **JWT Tokens**: Stateless authentication
 - **Middleware Stack**: Metrics, tracing, CORS, authentication
@@ -666,12 +674,12 @@ graph LR
         Client1 -->|Exchange| Token1["/oauth/token"]
         Token1 -->|Access Token| Client1
     end
-    
+
     subgraph ClientCredsFlow["Client Credentials Flow"]
         Service[Service] -->|Credentials| Token2["/oauth/token"]
         Token2 -->|Access Token| Service
     end
-    
+
     style Auth1 fill:#4caf50,color:#fff
     style Token1 fill:#2196f3,color:#fff
     style Token2 fill:#2196f3,color:#fff
