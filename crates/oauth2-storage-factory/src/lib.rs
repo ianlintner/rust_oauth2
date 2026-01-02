@@ -28,52 +28,54 @@ pub mod mongo {
 /// - `postgres://...` and `sqlite:...` -> SQLx backend
 /// - `mongodb://...` and `mongodb+srv://...` -> Mongo backend (requires `--features mongo`)
 pub async fn create_storage(database_url: &str) -> Result<DynStorage, OAuth2Error> {
-    if database_url.starts_with("mongodb://") || database_url.starts_with("mongodb+srv://") {
+    let is_mongo = database_url.starts_with("mongodb://") || database_url.starts_with("mongodb+srv://");
+
+    if is_mongo {
         #[cfg(feature = "mongo")]
         {
             let storage = mongo::MongoStorage::new(database_url).await?;
             let inner: DynStorage = Arc::new(storage);
             let observed = ObservedStorage::new(inner, "mongodb".to_string());
-            return Ok(Arc::new(observed));
+            Ok(Arc::new(observed))
         }
 
         #[cfg(not(feature = "mongo"))]
         {
-            return Err(OAuth2Error::new(
+            Err(OAuth2Error::new(
                 "server_error",
                 Some(
                     "MongoDB backend requested but the binary was built without the `mongo` feature",
                 ),
-            ));
+            ))
         }
-    }
-
-    // Default to SQLx backend for sqlite/postgres.
-    #[cfg(feature = "sqlx")]
-    {
-        let storage = oauth2_storage_sqlx::SqlxStorage::new(database_url).await?;
-        let db_system = if database_url.starts_with("postgres://")
-            || database_url.starts_with("postgresql://")
+    } else {
+        // Default to SQLx backend for sqlite/postgres.
+        #[cfg(feature = "sqlx")]
         {
-            "postgresql"
-        } else if database_url.starts_with("sqlite:") || database_url.starts_with("sqlite://") {
-            "sqlite"
-        } else {
-            "sql"
-        };
+            let storage = oauth2_storage_sqlx::SqlxStorage::new(database_url).await?;
+            let db_system = if database_url.starts_with("postgres://")
+                || database_url.starts_with("postgresql://")
+            {
+                "postgresql"
+            } else if database_url.starts_with("sqlite:") || database_url.starts_with("sqlite://") {
+                "sqlite"
+            } else {
+                "sql"
+            };
 
-        let inner: DynStorage = Arc::new(storage);
-        let observed = ObservedStorage::new(inner, db_system.to_string());
-        return Ok(Arc::new(observed));
-    }
+            let inner: DynStorage = Arc::new(storage);
+            let observed = ObservedStorage::new(inner, db_system.to_string());
+            Ok(Arc::new(observed))
+        }
 
-    #[cfg(not(feature = "sqlx"))]
-    {
-        Err(OAuth2Error::new(
-            "server_error",
-            Some(
-                "SQL backend requested but the binary was built without SQL support (feature `sqlx` disabled)",
-            ),
-        ))
+        #[cfg(not(feature = "sqlx"))]
+        {
+            Err(OAuth2Error::new(
+                "server_error",
+                Some(
+                    "SQL backend requested but the binary was built without SQL support (feature `sqlx` disabled)",
+                ),
+            ))
+        }
     }
 }
