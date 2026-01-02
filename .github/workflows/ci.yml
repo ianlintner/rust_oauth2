@@ -329,7 +329,7 @@ jobs:
       contents: read
     env:
       # Persist kubeconfig across steps so kubectl never falls back to http://localhost:8080.
-      KUBECONFIG: ${{ runner.temp }}/kubeconfig-kind-oauth2
+      KUBECONFIG: ${{ github.workspace }}/.kubeconfig-kind-oauth2
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
