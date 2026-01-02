@@ -208,7 +208,11 @@ _kubectl delete job flyway-migration -n "${NAMESPACE}" --ignore-not-found || tru
 kustomize build "${KUSTOMIZE_DIR}" | _kubectl apply -n "${NAMESPACE}" -f -
 
 echo "==> Waiting for Postgres readiness"
-_kubectl wait --for=condition=ready pod -l app=postgres -n "${NAMESPACE}" --timeout=180s
+if ! _kubectl rollout status statefulset/postgres -n "${NAMESPACE}" --timeout=240s; then
+  echo "Postgres did not become ready in time." >&2
+  _diag
+  exit 1
+fi
 
 echo "==> Waiting for Flyway migrations"
 if ! _kubectl wait --for=condition=complete job/flyway-migration -n "${NAMESPACE}" --timeout=360s; then
