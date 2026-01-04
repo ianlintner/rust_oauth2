@@ -4872,6 +4872,7 @@ dependencies = [
 name = "rust_oauth2_server"
 version = "0.0.8"
 dependencies = [
+ "actix",
  "actix-rt",
  "actix-web",
  "base64 0.22.1",
