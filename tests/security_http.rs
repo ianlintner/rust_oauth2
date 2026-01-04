@@ -6,11 +6,9 @@ use oauth2_observability::Metrics;
 
 fn extract_query_param(url: &str, key: &str) -> Option<String> {
     // Very small helper for test-only parsing.
-    let query = url.splitn(2, '?').nth(1)?;
+    let (_base, query) = url.split_once('?')?;
     for pair in query.split('&') {
-        let mut it = pair.splitn(2, '=');
-        let k = it.next()?;
-        let v = it.next().unwrap_or("");
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
         if k == key {
             return Some(v.to_string());
         }
