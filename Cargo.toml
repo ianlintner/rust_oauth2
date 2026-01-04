@@ -61,6 +61,7 @@ events-rabbit = ["oauth2-events/events-rabbit", "oauth2-server/events-rabbit"]
 
 [dev-dependencies]
 # Testing
+actix = "0.13"
 actix-rt = "2.9"
 actix-web = "4.4"
 tokio = { version = "1.35", features = ["full"] }
