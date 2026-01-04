@@ -7,7 +7,9 @@ use oauth2_core::{ClientCredentials, ClientRegistration, OAuth2Error};
 fn validate_redirect_uri(uri: &str) -> Result<(), OAuth2Error> {
     let uri = uri.trim();
     if uri.is_empty() {
-        return Err(OAuth2Error::invalid_request("redirect_uri must not be empty"));
+        return Err(OAuth2Error::invalid_request(
+            "redirect_uri must not be empty",
+        ));
     }
 
     // OAuth 2.0 requires redirection URIs to be absolute and MUST NOT include fragments.
@@ -18,7 +20,9 @@ fn validate_redirect_uri(uri: &str) -> Result<(), OAuth2Error> {
         ));
     }
     if uri.contains('\r') || uri.contains('\n') {
-        return Err(OAuth2Error::invalid_request("redirect_uri contains invalid characters"));
+        return Err(OAuth2Error::invalid_request(
+            "redirect_uri contains invalid characters",
+        ));
     }
 
     let lower = uri.to_ascii_lowercase();

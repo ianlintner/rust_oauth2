@@ -5,13 +5,16 @@ use serde::Deserialize;
 use oauth2_observability::Metrics;
 
 use crate::actors::{
-    AuthActor, ClientActor, CreateAuthorizationCode, CreateToken, GetClient, TokenActor,
-    MarkAuthorizationCodeUsed, ValidateAuthorizationCode, ValidateClient,
+    AuthActor, ClientActor, CreateAuthorizationCode, CreateToken, GetClient,
+    MarkAuthorizationCodeUsed, TokenActor, ValidateAuthorizationCode, ValidateClient,
 };
 use oauth2_core::{OAuth2Error, TokenResponse};
 
 fn validate_scope_subset(requested: &str, allowed: &str) -> Result<(), OAuth2Error> {
-    let allowed_scopes: Vec<&str> = allowed.split_whitespace().filter(|s| !s.is_empty()).collect();
+    let allowed_scopes: Vec<&str> = allowed
+        .split_whitespace()
+        .filter(|s| !s.is_empty())
+        .collect();
     let requested_scopes: Vec<&str> = requested
         .split_whitespace()
         .filter(|s| !s.is_empty())
@@ -22,8 +25,7 @@ fn validate_scope_subset(requested: &str, allowed: &str) -> Result<(), OAuth2Err
     }
 
     let all_allowed = requested_scopes
-        .iter()
-        .all(|s| allowed_scopes.contains(s));
+        .iter().all(|s| allowed_scopes.contains(s));
 
     if !all_allowed {
         return Err(OAuth2Error::invalid_scope(
@@ -35,8 +37,10 @@ fn validate_scope_subset(requested: &str, allowed: &str) -> Result<(), OAuth2Err
 }
 
 fn no_store_headers(mut resp: HttpResponse) -> HttpResponse {
-    resp.headers_mut()
-        .insert(actix_web::http::header::CACHE_CONTROL, "no-store".parse().unwrap());
+    resp.headers_mut().insert(
+        actix_web::http::header::CACHE_CONTROL,
+        "no-store".parse().unwrap(),
+    );
     resp.headers_mut()
         .insert(actix_web::http::header::PRAGMA, "no-cache".parse().unwrap());
     resp
