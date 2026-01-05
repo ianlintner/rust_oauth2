@@ -1,0 +1,4 @@
+# Keep this aligned with scripts/smoke/requirements.txt
+requests>=2.31,<3
+# On macOS, many system Pythons are built against LibreSSL; urllib3 v2 requires OpenSSL 1.1.1+.
+urllib3<2
