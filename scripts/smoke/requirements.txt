@@ -1,0 +1,3 @@
+requests>=2.31.0,<3
+# macOS system Python may be linked against LibreSSL; urllib3 v2 warns/limits support.
+urllib3<2
