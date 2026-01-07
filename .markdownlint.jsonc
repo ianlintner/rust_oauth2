@@ -2,6 +2,14 @@
   // Keep docs readable without overly-strict table formatting rules.
   "default": true,
 
+  // Allow longer prose lines; 80 chars is too strict for modern Markdown.
+  // Also ignore tables/code blocks where wrapping hurts readability.
+  "MD013": {
+    "line_length": 120,
+    "tables": false,
+    "code_blocks": false
+  },
+
   // Allow HTML when needed (MkDocs/Mermaid embeds, badges, etc.)
   "MD033": false,
 
