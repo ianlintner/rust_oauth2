@@ -178,7 +178,7 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                     let method = auth_code
                         .code_challenge_method
                         .as_deref()
-                        .unwrap_or("plain");
+                        .unwrap_or("S256");
                     if !validate_pkce(challenge, &verifier, method) {
                         return Err(OAuth2Error::invalid_grant("Invalid code verifier"));
                     }
@@ -256,8 +256,14 @@ fn generate_code() -> String {
 }
 
 fn validate_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
+    // RFC 7636: code_verifier length MUST be between 43 and 128 characters.
+    // We validate this early so short verifiers can't be used to weaken PKCE.
+    if verifier.len() < 43 || verifier.len() > 128 {
+        return false;
+    }
+
     match method {
-        "plain" => challenge == verifier,
+        // Only S256 is supported (OAuth 2.0 Security BCP guidance).
         "S256" => {
             use base64::{engine::general_purpose, Engine as _};
             use sha2::{Digest, Sha256};

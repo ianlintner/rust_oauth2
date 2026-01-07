@@ -30,3 +30,6 @@ subtle = "2.5"
 
 sha2 = "0.10"
 base64 = "0.22"
+
+# URL parsing and form/query decoding (used for strict OAuth parameter handling)
+url = "2.5"

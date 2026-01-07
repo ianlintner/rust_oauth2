@@ -4,6 +4,13 @@ use actix_web::{test, web, App};
 use oauth2_core::{Client, OAuth2Error, TokenResponse, User};
 use oauth2_observability::Metrics;
 
+fn s256_challenge(verifier: &str) -> String {
+    use base64::{engine::general_purpose, Engine as _};
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(verifier.as_bytes());
+    general_purpose::URL_SAFE_NO_PAD.encode(hash)
+}
+
 fn extract_query_param(url: &str, key: &str) -> Option<String> {
     // Very small helper for test-only parsing.
     let (_base, query) = url.split_once('?')?;
@@ -104,9 +111,9 @@ async fn authorize_rejects_unregistered_redirect_uri() {
 
     // NOTE: percent-encode redirect_uri so the request URI is always valid and decodes back to the
     // exact string stored for the client.
-    let req = test::TestRequest::get()
-        .uri("/oauth/authorize?response_type=code&client_id=client_a&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&scope=read")
-        .to_request();
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+    let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=code&client_id=client_a&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
     let resp = test::call_service(&app, req).await;
 
     assert_eq!(resp.status(), 400);
@@ -159,9 +166,9 @@ async fn authorize_rejects_implicit_response_type() {
     )
     .await;
 
-    let req = test::TestRequest::get()
-        .uri("/oauth/authorize?response_type=token&client_id=client_a&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read")
-        .to_request();
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+    let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=token&client_id=client_a&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
     let resp = test::call_service(&app, req).await;
 
     assert_eq!(resp.status(), 400);
@@ -307,7 +314,7 @@ async fn token_response_has_no_store_headers() {
 }
 
 #[actix_web::test]
-async fn authorization_code_requires_secret_unless_pkce_used() {
+async fn authorize_requires_pkce_s256() {
     let client = Client::new(
         "client_ac".to_string(),
         "secret_ac".to_string(),
@@ -351,58 +358,13 @@ async fn authorization_code_requires_secret_unless_pkce_used() {
     )
     .await;
 
-    // Get a code without PKCE
+    // Missing PKCE parameters should be rejected.
     let req = test::TestRequest::get().uri("/oauth/authorize?response_type=code&client_id=client_ac&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read").to_request();
     let resp = test::call_service(&app, req).await;
-    if resp.status() != 302 {
-        let status = resp.status();
-        let body = test::read_body(resp).await;
-        panic!(
-            "expected 302 from /oauth/authorize, got {status} body={}",
-            String::from_utf8_lossy(&body)
-        );
-    }
+    assert_eq!(resp.status(), 400);
 
-    let loc = resp
-        .headers()
-        .get(actix_web::http::header::LOCATION)
-        .and_then(|h| h.to_str().ok())
-        .unwrap();
-    let code = extract_query_param(loc, "code").expect("code");
-
-    // Exchange without a client_secret: should be rejected.
-    let req = test::TestRequest::post()
-        .uri("/oauth/token")
-        .set_form([
-            ("grant_type", "authorization_code"),
-            ("client_id", "client_ac"),
-            ("code", code.as_str()),
-            ("redirect_uri", "https://good.example/cb"),
-        ])
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 401);
-
-    // Exchange with the correct secret: should succeed.
-    let req = test::TestRequest::post()
-        .uri("/oauth/token")
-        .set_form([
-            ("grant_type", "authorization_code"),
-            ("client_id", "client_ac"),
-            ("client_secret", "secret_ac"),
-            ("code", code.as_str()),
-            ("redirect_uri", "https://good.example/cb"),
-        ])
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = test::read_body(resp).await;
-        panic!(
-            "expected successful token exchange, got {status} body={}",
-            String::from_utf8_lossy(&body)
-        );
-    }
+    let body: OAuth2Error = test::read_body_json(resp).await;
+    assert_eq!(body.error, "invalid_request");
 }
 
 #[actix_web::test]
@@ -450,14 +412,8 @@ async fn pkce_allows_public_exchange_and_prevents_downgrade() {
     )
     .await;
 
-    // For S256, the server expects challenge = BASE64URL(SHA256(verifier))
     let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-    let challenge = {
-        use base64::{engine::general_purpose, Engine as _};
-        use sha2::{Digest, Sha256};
-        let hash = Sha256::digest(verifier.as_bytes());
-        general_purpose::URL_SAFE_NO_PAD.encode(hash)
-    };
+    let challenge = s256_challenge(verifier);
 
     // Get a code with PKCE
     let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=code&client_id=client_pkce&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
@@ -478,12 +434,13 @@ async fn pkce_allows_public_exchange_and_prevents_downgrade() {
         .unwrap();
     let code = extract_query_param(loc, "code").expect("code");
 
-    // Downgrade attempt: omit verifier.
+    // Missing verifier: should be rejected.
     let req = test::TestRequest::post()
         .uri("/oauth/token")
         .set_form([
             ("grant_type", "authorization_code"),
             ("client_id", "client_pkce"),
+            ("client_secret", "secret_pkce"),
             ("code", code.as_str()),
             ("redirect_uri", "https://good.example/cb"),
         ])
@@ -494,12 +451,30 @@ async fn pkce_allows_public_exchange_and_prevents_downgrade() {
     let body: OAuth2Error = test::read_body_json(resp).await;
     assert_eq!(body.error, "invalid_grant");
 
-    // Correct exchange: include verifier, omit client_secret.
+    // Missing client_secret: should be rejected (token endpoint requires client auth).
     let req = test::TestRequest::post()
         .uri("/oauth/token")
         .set_form([
             ("grant_type", "authorization_code"),
             ("client_id", "client_pkce"),
+            ("code", code.as_str()),
+            ("redirect_uri", "https://good.example/cb"),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    let body: OAuth2Error = test::read_body_json(resp).await;
+    assert_eq!(body.error, "invalid_client");
+
+    // Correct exchange: include verifier and client_secret.
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .set_form([
+            ("grant_type", "authorization_code"),
+            ("client_id", "client_pkce"),
+            ("client_secret", "secret_pkce"),
             ("code", code.as_str()),
             ("redirect_uri", "https://good.example/cb"),
             ("code_verifier", verifier),
@@ -554,8 +529,10 @@ async fn authorization_code_cannot_be_reused() {
     )
     .await;
 
-    // Get a code
-    let req = test::TestRequest::get().uri("/oauth/authorize?response_type=code&client_id=client_reuse&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read").to_request();
+    // Get a code (PKCE required)
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+    let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=code&client_id=client_reuse&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
     let resp = test::call_service(&app, req).await;
     if resp.status() != 302 {
         let status = resp.status();
@@ -582,6 +559,7 @@ async fn authorization_code_cannot_be_reused() {
             ("client_secret", "secret_reuse"),
             ("code", code.as_str()),
             ("redirect_uri", "https://good.example/cb"),
+            ("code_verifier", verifier),
         ])
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -596,6 +574,7 @@ async fn authorization_code_cannot_be_reused() {
             ("client_secret", "secret_reuse"),
             ("code", code.as_str()),
             ("redirect_uri", "https://good.example/cb"),
+            ("code_verifier", verifier),
         ])
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -672,4 +651,164 @@ async fn well_known_metadata_matches_supported_flows() {
         .cloned()
         .unwrap_or_default();
     assert!(!gts.iter().any(|v| v == "refresh_token"));
+    assert!(!gts.iter().any(|v| v == "password"));
+
+    let pkce_methods = body
+        .get("code_challenge_methods_supported")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    assert!(pkce_methods.iter().any(|v| v == "S256"));
+    assert!(!pkce_methods.iter().any(|v| v == "plain"));
+}
+
+#[actix_web::test]
+async fn authorize_redirect_has_clickjacking_and_referrer_headers() {
+    let client = Client::new(
+        "client_hdr".to_string(),
+        "secret_hdr".to_string(),
+        vec!["https://good.example/cb".to_string()],
+        vec!["authorization_code".to_string()],
+        "read".to_string(),
+        "test".to_string(),
+    );
+
+    let (token_actor, client_actor, auth_actor, jwt_secret, metrics) = setup_context(client).await;
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(token_actor))
+            .app_data(web::Data::new(client_actor))
+            .app_data(web::Data::new(auth_actor))
+            .app_data(web::Data::new(jwt_secret))
+            .app_data(web::Data::new(metrics))
+            .service(
+                web::scope("/oauth")
+                    .route(
+                        "/authorize",
+                        web::get().to(oauth2_actix::handlers::oauth::authorize),
+                    )
+                    .route(
+                        "/token",
+                        web::post().to(oauth2_actix::handlers::oauth::token),
+                    )
+                    .route(
+                        "/introspect",
+                        web::post().to(oauth2_actix::handlers::token::introspect),
+                    )
+                    .route(
+                        "/revoke",
+                        web::post().to(oauth2_actix::handlers::token::revoke),
+                    ),
+            )
+            .service(web::scope("/.well-known").route(
+                "/openid-configuration",
+                web::get().to(oauth2_actix::handlers::wellknown::openid_configuration),
+            )),
+    )
+    .await;
+
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+    let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=code&client_id=client_hdr&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 302);
+
+    let rp = resp
+        .headers()
+        .get(actix_web::http::header::REFERRER_POLICY)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    assert!(rp.contains("no-referrer"));
+
+    let xfo = resp
+        .headers()
+        .get(actix_web::http::header::X_FRAME_OPTIONS)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    assert!(xfo.contains("DENY"));
+
+    let csp = resp
+        .headers()
+        .get(actix_web::http::header::CONTENT_SECURITY_POLICY)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    assert!(csp.contains("frame-ancestors"));
+}
+
+#[actix_web::test]
+async fn pkce_rejects_short_verifier() {
+    let client = Client::new(
+        "client_short".to_string(),
+        "secret_short".to_string(),
+        vec!["https://good.example/cb".to_string()],
+        vec!["authorization_code".to_string()],
+        "read".to_string(),
+        "test".to_string(),
+    );
+
+    let (token_actor, client_actor, auth_actor, jwt_secret, metrics) = setup_context(client).await;
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(token_actor))
+            .app_data(web::Data::new(client_actor))
+            .app_data(web::Data::new(auth_actor))
+            .app_data(web::Data::new(jwt_secret))
+            .app_data(web::Data::new(metrics))
+            .service(
+                web::scope("/oauth")
+                    .route(
+                        "/authorize",
+                        web::get().to(oauth2_actix::handlers::oauth::authorize),
+                    )
+                    .route(
+                        "/token",
+                        web::post().to(oauth2_actix::handlers::oauth::token),
+                    )
+                    .route(
+                        "/introspect",
+                        web::post().to(oauth2_actix::handlers::token::introspect),
+                    )
+                    .route(
+                        "/revoke",
+                        web::post().to(oauth2_actix::handlers::token::revoke),
+                    ),
+            )
+            .service(web::scope("/.well-known").route(
+                "/openid-configuration",
+                web::get().to(oauth2_actix::handlers::wellknown::openid_configuration),
+            )),
+    )
+    .await;
+
+    // Use a valid-length verifier to mint a code.
+    let good_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(good_verifier);
+    let req = test::TestRequest::get().uri(&format!("/oauth/authorize?response_type=code&client_id=client_short&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256")).to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 302);
+
+    let loc = resp
+        .headers()
+        .get(actix_web::http::header::LOCATION)
+        .and_then(|h| h.to_str().ok())
+        .unwrap();
+    let code = extract_query_param(loc, "code").expect("code");
+
+    // Exchange with a too-short verifier should fail.
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .set_form([
+            ("grant_type", "authorization_code"),
+            ("client_id", "client_short"),
+            ("client_secret", "secret_short"),
+            ("code", code.as_str()),
+            ("redirect_uri", "https://good.example/cb"),
+            ("code_verifier", "short"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let body: OAuth2Error = test::read_body_json(resp).await;
+    assert_eq!(body.error, "invalid_grant");
 }
