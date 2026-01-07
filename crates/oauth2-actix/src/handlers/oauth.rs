@@ -292,16 +292,17 @@ async fn handle_authorization_code_grant(
     let code = req
         .code
         .ok_or_else(|| OAuth2Error::invalid_request("Missing code"))?;
-    let redirect_uri = req
-        .redirect_uri
-        .ok_or_else(|| OAuth2Error::invalid_request("Missing redirect_uri"))?;
+
+    if matches!(req.redirect_uri.as_deref(), Some("")) {
+        return Err(OAuth2Error::invalid_request("redirect_uri must not be empty"));
+    }
 
     // Validate authorization code
     let auth_code = auth_actor
         .send(ValidateAuthorizationCode {
             code: code.clone(),
             client_id: req.client_id.clone(),
-            redirect_uri,
+            redirect_uri: req.redirect_uri,
             code_verifier: req.code_verifier,
             span: tracing::Span::current(),
         })

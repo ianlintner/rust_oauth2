@@ -485,6 +485,178 @@ async fn pkce_allows_public_exchange_and_prevents_downgrade() {
 }
 
 #[actix_web::test]
+async fn token_authorization_code_exchange_allows_missing_redirect_uri() {
+    let client = Client::new(
+        "client_oauth21".to_string(),
+        "secret_oauth21".to_string(),
+        vec!["https://good.example/cb".to_string()],
+        vec!["authorization_code".to_string()],
+        "read".to_string(),
+        "test".to_string(),
+    );
+
+    let (token_actor, client_actor, auth_actor, jwt_secret, metrics) = setup_context(client).await;
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(token_actor))
+            .app_data(web::Data::new(client_actor))
+            .app_data(web::Data::new(auth_actor))
+            .app_data(web::Data::new(jwt_secret))
+            .app_data(web::Data::new(metrics))
+            .service(
+                web::scope("/oauth")
+                    .route(
+                        "/authorize",
+                        web::get().to(oauth2_actix::handlers::oauth::authorize),
+                    )
+                    .route(
+                        "/token",
+                        web::post().to(oauth2_actix::handlers::oauth::token),
+                    )
+                    .route(
+                        "/introspect",
+                        web::post().to(oauth2_actix::handlers::token::introspect),
+                    )
+                    .route(
+                        "/revoke",
+                        web::post().to(oauth2_actix::handlers::token::revoke),
+                    ),
+            )
+            .service(web::scope("/.well-known").route(
+                "/openid-configuration",
+                web::get().to(oauth2_actix::handlers::wellknown::openid_configuration),
+            )),
+    )
+    .await;
+
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+
+    // Get a code with PKCE
+    let req = test::TestRequest::get().uri(&format!(
+        "/oauth/authorize?response_type=code&client_id=client_oauth21&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256"
+    )).to_request();
+    let resp = test::call_service(&app, req).await;
+    if resp.status() != 302 {
+        let status = resp.status();
+        let body = test::read_body(resp).await;
+        panic!(
+            "expected 302 from /oauth/authorize (PKCE), got {status} body={}",
+            String::from_utf8_lossy(&body)
+        );
+    }
+
+    let loc = resp
+        .headers()
+        .get(actix_web::http::header::LOCATION)
+        .and_then(|h| h.to_str().ok())
+        .unwrap();
+    let code = extract_query_param(loc, "code").expect("code");
+
+    // OAuth 2.1 token request style: omit redirect_uri.
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .set_form([
+            ("grant_type", "authorization_code"),
+            ("client_id", "client_oauth21"),
+            ("client_secret", "secret_oauth21"),
+            ("code", code.as_str()),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+}
+
+#[actix_web::test]
+async fn token_authorization_code_exchange_rejects_wrong_redirect_uri_when_provided() {
+    let client = Client::new(
+        "client_redirect_mismatch".to_string(),
+        "secret_redirect_mismatch".to_string(),
+        vec!["https://good.example/cb".to_string()],
+        vec!["authorization_code".to_string()],
+        "read".to_string(),
+        "test".to_string(),
+    );
+
+    let (token_actor, client_actor, auth_actor, jwt_secret, metrics) = setup_context(client).await;
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(token_actor))
+            .app_data(web::Data::new(client_actor))
+            .app_data(web::Data::new(auth_actor))
+            .app_data(web::Data::new(jwt_secret))
+            .app_data(web::Data::new(metrics))
+            .service(
+                web::scope("/oauth")
+                    .route(
+                        "/authorize",
+                        web::get().to(oauth2_actix::handlers::oauth::authorize),
+                    )
+                    .route(
+                        "/token",
+                        web::post().to(oauth2_actix::handlers::oauth::token),
+                    )
+                    .route(
+                        "/introspect",
+                        web::post().to(oauth2_actix::handlers::token::introspect),
+                    )
+                    .route(
+                        "/revoke",
+                        web::post().to(oauth2_actix::handlers::token::revoke),
+                    ),
+            )
+            .service(web::scope("/.well-known").route(
+                "/openid-configuration",
+                web::get().to(oauth2_actix::handlers::wellknown::openid_configuration),
+            )),
+    )
+    .await;
+
+    let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    let challenge = s256_challenge(verifier);
+
+    // Get a code bound to the correct redirect_uri.
+    let req = test::TestRequest::get().uri(&format!(
+        "/oauth/authorize?response_type=code&client_id=client_redirect_mismatch&redirect_uri=https%3A%2F%2Fgood.example%2Fcb&scope=read&code_challenge={challenge}&code_challenge_method=S256"
+    )).to_request();
+    let resp = test::call_service(&app, req).await;
+    if resp.status() != 302 {
+        let status = resp.status();
+        let body = test::read_body(resp).await;
+        panic!(
+            "expected 302 from /oauth/authorize (PKCE), got {status} body={}",
+            String::from_utf8_lossy(&body)
+        );
+    }
+
+    let loc = resp
+        .headers()
+        .get(actix_web::http::header::LOCATION)
+        .and_then(|h| h.to_str().ok())
+        .unwrap();
+    let code = extract_query_param(loc, "code").expect("code");
+
+    // OAuth 2.0 backward-compat style: include redirect_uri, but wrong => invalid_grant.
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .set_form([
+            ("grant_type", "authorization_code"),
+            ("client_id", "client_redirect_mismatch"),
+            ("client_secret", "secret_redirect_mismatch"),
+            ("code", code.as_str()),
+            ("redirect_uri", "https://evil.example/cb"),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let body: OAuth2Error = test::read_body_json(resp).await;
+    assert_eq!(body.error, "invalid_grant");
+}
+
+#[actix_web::test]
 async fn authorization_code_cannot_be_reused() {
     let client = Client::new(
         "client_reuse".to_string(),

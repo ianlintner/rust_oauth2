@@ -15,6 +15,7 @@ You are a specialized security agent for the Rust OAuth2 Server. Your role is to
 ### Client Authentication
 
 #### Secure Client Secret Storage
+
 ```rust
 // GOOD: Hash client secrets
 use argon2::{Argon2, PasswordHasher};
@@ -28,6 +29,7 @@ let password_hash = argon2
 ```
 
 #### Constant-Time Comparison
+
 ```rust
 // GOOD: Use constant-time comparison for secrets
 use subtle::ConstantTimeEq;
@@ -43,6 +45,7 @@ fn verify_secret(provided: &str, stored: &str) -> bool {
 ### Token Security
 
 #### JWT Configuration
+
 ```rust
 use jsonwebtoken::{Algorithm, Header, Validation};
 
@@ -56,6 +59,7 @@ let refresh_exp = Utc::now() + Duration::days(30);  // Max 30 days for refresh t
 ```
 
 #### Token Storage
+
 - **Access tokens**: Never stored, stateless JWT
 - **Refresh tokens**: Hashed in database
 - **Authorization codes**: One-time use, short TTL
@@ -95,14 +99,14 @@ use validator::Validate;
 pub struct ClientRequest {
     #[validate(length(min = 3, max = 255))]
     pub client_name: String,
-    
+
     #[validate(length(min = 1, max = 10))]
     #[validate(custom = "validate_redirect_uris")]
     pub redirect_uris: Vec<String>,
-    
+
     #[validate(length(min = 1, max = 10))]
     pub grant_types: Vec<String>,
-    
+
     #[validate(length(max = 1000))]
     pub scope: Option<String>,
 }
@@ -147,7 +151,7 @@ use argon2::{
 pub async fn hash_password(password: &str) -> Result<String, Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
-    
+
     Ok(argon2
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| Error::HashError(e.to_string()))?
@@ -158,7 +162,7 @@ pub async fn hash_password(password: &str) -> Result<String, Error> {
 pub async fn verify_password(password: &str, hash: &str) -> Result<bool, Error> {
     let parsed_hash = PasswordHash::new(hash)
         .map_err(|e| Error::HashError(e.to_string()))?;
-    
+
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok())
@@ -182,7 +186,7 @@ fn validate_password_strength(password: &str) -> Result<(), ValidationError> {
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
     let has_digit = password.chars().any(|c| c.is_numeric());
     let has_special = password.chars().any(|c| !c.is_alphanumeric());
-    
+
     if has_lowercase && has_uppercase && has_digit && has_special {
         Ok(())
     } else {
@@ -266,14 +270,14 @@ impl RateLimiter {
     pub fn check(&self, key: &str) -> Result<(), Error> {
         let mut requests = self.requests.lock().unwrap();
         let now = Instant::now();
-        
+
         let user_requests = requests.entry(key.to_string()).or_insert_with(Vec::new);
         user_requests.retain(|&t| now.duration_since(t) < self.window);
-        
+
         if user_requests.len() >= self.max_requests {
             return Err(actix_web::error::ErrorTooManyRequests("Rate limit exceeded"));
         }
-        
+
         user_requests.push(now);
         Ok(())
     }
@@ -292,7 +296,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
     let config = Config::builder()
         .add_source(Environment::with_prefix("OAUTH2"))
         .build()?;
-    
+
     // Validate required secrets
     let jwt_secret = config.get_string("jwt_secret")?;
     if jwt_secret.len() < 32 {
@@ -300,7 +304,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
             "JWT secret must be at least 32 characters".to_string()
         ));
     }
-    
+
     Ok(AppConfig { jwt_secret, /* ... */ })
 }
 ```
@@ -353,10 +357,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Client {
     pub client_id: String,
-    
+
     #[serde(skip_serializing)]  // Never log secrets
     pub client_secret: String,
-    
+
     pub client_name: String,
 }
 
@@ -463,6 +467,7 @@ cargo deny check
 ### Penetration Testing
 
 #### Test Authentication
+
 ```bash
 # Test invalid credentials
 curl -X POST http://localhost:8080/oauth/token \
@@ -478,15 +483,17 @@ curl -X POST http://localhost:8080/oauth/token \
 ```
 
 #### Test PKCE
+
 ```bash
 # Test without code_verifier when PKCE required
 curl -X POST http://localhost:8080/oauth/token \
-  -d "grant_type=authorization_code&code=ABC123&client_id=test&redirect_uri=http://localhost:3000"
+    -d "grant_type=authorization_code&code=ABC123&client_id=test"
 
 # Expected: 400 Bad Request
 ```
 
 #### Test Token Introspection
+
 ```bash
 # Test with invalid token
 curl -X POST http://localhost:8080/oauth/introspect \
@@ -502,7 +509,7 @@ curl -X POST http://localhost:8080/oauth/introspect \
 #[cfg(test)]
 mod fuzz_tests {
     use libfuzzer_sys::fuzz_target;
-    
+
     fuzz_target!(|data: &[u8]| {
         if let Ok(s) = std::str::from_utf8(data) {
             let _ = validate_client_id(s);
@@ -538,8 +545,8 @@ kubectl logs -n oauth2-server -l app=oauth2-server --since=24h | grep ERROR
 
 # 5. Check for unauthorized access
 psql -U oauth2_user -d oauth2 -c "
-  SELECT DISTINCT client_id, user_id, created_at 
-  FROM tokens 
+  SELECT DISTINCT client_id, user_id, created_at
+  FROM tokens
   WHERE created_at > NOW() - INTERVAL '24 hours'
   ORDER BY created_at DESC;
 "
@@ -556,15 +563,15 @@ pub async fn delete_user_data(user_id: &str, pool: &PgPool) -> Result<(), Error>
     sqlx::query!("DELETE FROM tokens WHERE user_id = $1", user_id)
         .execute(pool)
         .await?;
-    
+
     // Delete user account
     sqlx::query!("DELETE FROM users WHERE user_id = $1", user_id)
         .execute(pool)
         .await?;
-    
+
     // Audit log
     info!("User data deleted - user_id={}", user_id);
-    
+
     Ok(())
 }
 
@@ -573,7 +580,7 @@ pub async fn export_user_data(user_id: &str, pool: &PgPool) -> Result<UserData, 
     // Export all user data in JSON format
     let user = get_user(user_id, pool).await?;
     let tokens = get_user_tokens(user_id, pool).await?;
-    
+
     Ok(UserData {
         user,
         tokens: tokens.into_iter().map(sanitize_token).collect(),

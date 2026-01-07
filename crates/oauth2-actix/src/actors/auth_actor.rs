@@ -104,7 +104,7 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
 pub struct ValidateAuthorizationCode {
     pub code: String,
     pub client_id: String,
-    pub redirect_uri: String,
+    pub redirect_uri: Option<String>,
     pub code_verifier: Option<String>,
     pub span: tracing::Span,
 }
@@ -165,8 +165,13 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                     return Err(OAuth2Error::invalid_grant("Client ID mismatch"));
                 }
 
-                if auth_code.redirect_uri != msg.redirect_uri {
-                    return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
+                // OAuth 2.1 removes redirect_uri from the authorization_code token request.
+                // For backward compatibility (OAuth 2.0 clients), we still accept it and
+                // enforce it when provided.
+                if let Some(redirect_uri) = msg.redirect_uri {
+                    if auth_code.redirect_uri != redirect_uri {
+                        return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
+                    }
                 }
 
                 // Validate PKCE if present

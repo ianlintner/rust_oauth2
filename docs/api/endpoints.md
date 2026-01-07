@@ -76,6 +76,9 @@ Exchange an authorization code or client credentials for an access token.
 
 #### Authorization Code Grant
 
+!!! note "OAuth 2.1 compatibility"
+`redirect_uri` is optional in the authorization code token request (OAuth 2.1). For backward compatibility with OAuth 2.0 clients, you may still send it; if provided, it must exactly match the `redirect_uri` used at the authorization step.
+
 ```http
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded

@@ -283,7 +283,6 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code&
 code=AUTH_CODE_HERE&
-redirect_uri=https://yourapp.com/callback&
 client_id=YOUR_CLIENT_ID&
 client_secret=YOUR_CLIENT_SECRET&
 code_verifier=CODE_VERIFIER_HERE
@@ -291,14 +290,14 @@ code_verifier=CODE_VERIFIER_HERE
 
 **Parameters:**
 
-| Parameter       | Required    | Description                                   |
-| --------------- | ----------- | --------------------------------------------- |
-| `grant_type`    | Yes         | Must be `authorization_code`                  |
-| `code`          | Yes         | The authorization code from step 3            |
-| `redirect_uri`  | Yes         | Must match the redirect_uri from step 1       |
-| `client_id`     | Yes         | The client identifier                         |
-| `client_secret` | Conditional | Required for confidential clients             |
-| `code_verifier` | Yes         | PKCE verifier used to derive `code_challenge` |
+| Parameter       | Required    | Description                                                                          |
+| --------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `grant_type`    | Yes         | Must be `authorization_code`                                                         |
+| `code`          | Yes         | The authorization code from step 3                                                   |
+| `redirect_uri`  | No          | Optional (OAuth 2.1). If provided, must exactly match the `redirect_uri` from step 1 |
+| `client_id`     | Yes         | The client identifier                                                                |
+| `client_secret` | Conditional | Required for confidential clients                                                    |
+| `code_verifier` | Yes         | PKCE verifier used to derive `code_challenge`                                        |
 
 **cURL Example:**
 
@@ -307,7 +306,6 @@ curl -X POST http://localhost:8080/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=authorization_code" \
   -d "code=AUTH_CODE_HERE" \
-  -d "redirect_uri=http://localhost:3000/callback" \
   -d "client_id=YOUR_CLIENT_ID" \
   -d "client_secret=YOUR_CLIENT_SECRET" \
   -d "code_verifier=CODE_VERIFIER_HERE"

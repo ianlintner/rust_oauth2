@@ -96,7 +96,7 @@ You should see an `authorization_code_created` event.
 # Note: Replace CLIENT_ID, CLIENT_SECRET, CODE, and CODE_VERIFIER with actual values
 curl -X POST http://localhost:8080/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code&code=CODE&redirect_uri=http://localhost:3000/callback&client_id=CLIENT_ID&client_secret=CLIENT_SECRET&code_verifier=CODE_VERIFIER"
+  -d "grant_type=authorization_code&code=CODE&client_id=CLIENT_ID&client_secret=CLIENT_SECRET&code_verifier=CODE_VERIFIER"
 ```
 
 You should see `authorization_code_validated` and `token_created` events.
