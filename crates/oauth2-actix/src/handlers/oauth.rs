@@ -160,7 +160,9 @@ pub async fn authorize(
         ));
     }
     if code_challenge.trim().is_empty() {
-        return Err(OAuth2Error::invalid_request("code_challenge must not be empty"));
+        return Err(OAuth2Error::invalid_request(
+            "code_challenge must not be empty",
+        ));
     }
 
     // In a real implementation, this would show a consent page
@@ -262,24 +264,17 @@ pub async fn token(
 
     match form.grant_type.as_str() {
         "authorization_code" => {
-            handle_authorization_code_grant(
-                form,
-                token_actor,
-                client_actor,
-                auth_actor,
-                metrics,
-            )
-            .await
+            handle_authorization_code_grant(form, token_actor, client_actor, auth_actor, metrics)
+                .await
         }
         "client_credentials" => {
-            handle_client_credentials_grant(form, token_actor, client_actor, metrics)
-                .await
+            handle_client_credentials_grant(form, token_actor, client_actor, metrics).await
         }
         // Password and refresh_token grants are intentionally disabled by default
         // (OAuth 2.0 Security BCP).
-        "password" | "refresh_token" => Err(OAuth2Error::unsupported_grant_type(
-            "Grant type disabled",
-        )),
+        "password" | "refresh_token" => {
+            Err(OAuth2Error::unsupported_grant_type("Grant type disabled"))
+        }
         _ => Err(OAuth2Error::unsupported_grant_type(&format!(
             "Grant type '{}' not supported",
             form.grant_type
@@ -437,5 +432,3 @@ async fn handle_client_credentials_grant(
         HttpResponse::Ok().json(TokenResponse::from(token)),
     ))
 }
-
-

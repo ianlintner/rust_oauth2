@@ -175,10 +175,7 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                         .code_verifier
                         .ok_or_else(|| OAuth2Error::invalid_grant("Code verifier required"))?;
 
-                    let method = auth_code
-                        .code_challenge_method
-                        .as_deref()
-                        .unwrap_or("S256");
+                    let method = auth_code.code_challenge_method.as_deref().unwrap_or("S256");
                     if !validate_pkce(challenge, &verifier, method) {
                         return Err(OAuth2Error::invalid_grant("Invalid code verifier"));
                     }
