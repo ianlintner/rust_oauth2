@@ -35,7 +35,7 @@ curl -X POST http://localhost:8080/clients/register \
   -d '{
     "client_name": "My First App",
     "redirect_uris": ["http://localhost:3000/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
+    "grant_types": ["authorization_code"],
     "scope": "read write"
   }'
 ```
@@ -48,14 +48,14 @@ curl -X POST http://localhost:8080/clients/register \
   "client_secret": "secret_1a2b3c4d5e6f7g8h9i0j",
   "client_name": "My First App",
   "redirect_uris": ["http://localhost:3000/callback"],
-  "grant_types": ["authorization_code", "refresh_token"],
+  "grant_types": ["authorization_code"],
   "scope": "read write",
   "created_at": "2024-01-01T00:00:00Z"
 }
 ```
 
 !!! tip "Save Your Credentials"
-    Save the `client_id` and `client_secret` - you'll need them for authentication!
+Save the `client_id` and `client_secret` - you'll need them for authentication!
 
 ### Step 2: Authorize Your Application
 
@@ -69,7 +69,7 @@ sequenceDiagram
     participant App as Your Application
     participant Browser
     participant OAuth2 as OAuth2 Server
-    
+
     User->>App: Click "Login"
     App->>Browser: Redirect to authorization URL
     Browser->>OAuth2: GET /oauth/authorize
@@ -79,14 +79,16 @@ sequenceDiagram
     Browser->>App: Return code
     Note right of App: Exchange code for token
     App->>OAuth2: POST /oauth/token (exchange code)
-    OAuth2->>App: Return access_token & refresh_token
+    OAuth2->>App: Return access_token
     App->>User: Logged in!
 ```
 
 **Step 2.1: Redirect User to Authorization Endpoint**
 
+PKCE is required for the Authorization Code flow.
+
 ```
-http://localhost:8080/oauth/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read%20write&state=random_state_string
+http://localhost:8080/oauth/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read%20write&state=random_state_string&code_challenge=CODE_CHALLENGE_HERE&code_challenge_method=S256
 ```
 
 **Query Parameters:**
@@ -96,6 +98,8 @@ http://localhost:8080/oauth/authorize?response_type=code&client_id=YOUR_CLIENT_I
 - `redirect_uri`: Must match one of your registered URIs
 - `scope`: Space-separated list of scopes (URL encoded)
 - `state`: Random string to prevent CSRF attacks
+- `code_challenge`: PKCE challenge derived from `code_verifier`
+- `code_challenge_method`: Must be `S256`
 
 **Step 2.2: User Approves Access**
 
@@ -114,7 +118,8 @@ curl -X POST http://localhost:8080/oauth/token \
   -d "code=AUTH_CODE_HERE" \
   -d "redirect_uri=http://localhost:3000/callback" \
   -d "client_id=YOUR_CLIENT_ID" \
-  -d "client_secret=YOUR_CLIENT_SECRET"
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code_verifier=CODE_VERIFIER_HERE"
 ```
 
 **Response:**
@@ -124,7 +129,6 @@ curl -X POST http://localhost:8080/oauth/token \
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "refresh_token": "refresh_1a2b3c4d5e6f7g8h9i0j",
   "scope": "read write"
 }
 ```
@@ -138,18 +142,11 @@ curl http://your-api.com/api/resource \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-### Step 4: Refresh the Token
+### Step 4: Refresh Tokens (Disabled by Default)
 
-When the access token expires, use the refresh token to get a new one:
+For improved security, the `refresh_token` grant is disabled by default. Requests will be rejected with `unsupported_grant_type`.
 
-```bash
-curl -X POST http://localhost:8080/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=refresh_token" \
-  -d "refresh_token=YOUR_REFRESH_TOKEN" \
-  -d "client_id=YOUR_CLIENT_ID" \
-  -d "client_secret=YOUR_CLIENT_SECRET"
-```
+If you need refresh tokens for your deployment, enable them explicitly and ensure you follow OAuth 2.0 Security BCP guidance.
 
 ## Alternative OAuth2 Flows
 
@@ -170,7 +167,7 @@ curl -X POST http://localhost:8080/oauth/token \
 sequenceDiagram
     participant App as Your Service
     participant OAuth2 as OAuth2 Server
-    
+
     Note right of App: grant_type=client_credentials
     App->>OAuth2: POST /oauth/token
     OAuth2->>OAuth2: Validate client credentials
@@ -180,8 +177,10 @@ sequenceDiagram
 
 ### Resource Owner Password Flow
 
-!!! warning "Not Recommended"
-    Only use this flow for trusted first-party applications. It requires the user to share their password with the client.
+!!! warning "Disabled by Default"
+The Resource Owner Password Credentials (ROPC) grant (`password`) is disabled by default. Requests will be rejected with `unsupported_grant_type`.
+
+**Example request (rejected):**
 
 ```bash
 curl -X POST http://localhost:8080/oauth/token \
@@ -192,6 +191,15 @@ curl -X POST http://localhost:8080/oauth/token \
   -d "client_id=YOUR_CLIENT_ID" \
   -d "client_secret=YOUR_CLIENT_SECRET" \
   -d "scope=read"
+```
+
+**Expected response:**
+
+```json
+{
+  "error": "unsupported_grant_type",
+  "error_description": "The grant_type is not supported"
+}
 ```
 
 ## Token Management
@@ -249,9 +257,7 @@ export OAUTH2_GOOGLE_REDIRECT_URI=http://localhost:8080/auth/callback/google
 ### Step 2: Direct Users to Login
 
 ```html
-<a href="http://localhost:8080/auth/login/google">
-  Login with Google
-</a>
+<a href="http://localhost:8080/auth/login/google"> Login with Google </a>
 ```
 
 ### Step 3: Handle Callback
@@ -317,39 +323,40 @@ The admin dashboard provides a web interface for managing clients and tokens.
 
 ```javascript
 // Frontend - Redirect to authorization
-window.location.href = 
-  'http://localhost:8080/oauth/authorize?' +
-  'response_type=code&' +
-  'client_id=YOUR_CLIENT_ID&' +
-  'redirect_uri=http://localhost:3000/callback&' +
-  'scope=read write&' +
-  'state=' + generateRandomState();
+window.location.href =
+  "http://localhost:8080/oauth/authorize?" +
+  "response_type=code&" +
+  "client_id=YOUR_CLIENT_ID&" +
+  "redirect_uri=http://localhost:3000/callback&" +
+  "scope=read write&" +
+  "state=" +
+  generateRandomState();
 
 // Backend - Handle callback
-app.get('/callback', async (req, res) => {
+app.get("/callback", async (req, res) => {
   const { code, state } = req.query;
-  
+
   // Verify state to prevent CSRF
   if (state !== expectedState) {
-    return res.status(400).send('Invalid state');
+    return res.status(400).send("Invalid state");
   }
-  
+
   // Exchange code for token
-  const tokenResponse = await fetch('http://localhost:8080/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  const tokenResponse = await fetch("http://localhost:8080/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: 'authorization_code',
+      grant_type: "authorization_code",
       code: code,
-      redirect_uri: 'http://localhost:3000/callback',
-      client_id: 'YOUR_CLIENT_ID',
-      client_secret: 'YOUR_CLIENT_SECRET'
-    })
+      redirect_uri: "http://localhost:3000/callback",
+      client_id: "YOUR_CLIENT_ID",
+      client_secret: "YOUR_CLIENT_SECRET",
+    }),
   });
-  
+
   const tokens = await tokenResponse.json();
   // Store tokens securely
-  res.redirect('/dashboard');
+  res.redirect("/dashboard");
 });
 ```
 
@@ -411,7 +418,9 @@ Now that you have the basics working:
 3. **Explore Advanced Features**:
    - [Token Introspection](../api/endpoints.md#token-introspection)
    - [Scope Management](../api/authentication.md#scopes)
-  - [Custom Claims](../architecture/overview.md#jwt-token-structure)
+
+- [Custom Claims](../architecture/overview.md#jwt-token-structure)
+
 4. **Monitor Your Server**: Set up [Metrics and Tracing](../observability/metrics.md)
 5. **Deploy to Production**: Follow [Deployment Guides](../deployment/docker.md)
 

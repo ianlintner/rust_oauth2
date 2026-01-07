@@ -11,6 +11,8 @@ The Authorization Code Flow is a two-step process:
 
 This separation ensures the access token is never exposed to the user's browser, making it more secure than implicit flows.
 
+This server requires PKCE for the Authorization Code flow, and only the `S256` code challenge method is accepted.
+
 ## Flow Diagram
 
 ```mermaid
@@ -21,29 +23,29 @@ sequenceDiagram
     participant Browser as User Agent (Browser)
     participant AuthServer as Authorization Server (OAuth2 Server)
     participant ResourceServer as Resource Server (API)
-    
+
     User->>Client: 1. Initiate Login
     Client->>Browser: 2. Redirect to authorization endpoint
-    Note over Client,Browser: With client_id, redirect_uri, scope, state parameters
-    
+    Note over Client,Browser: With client_id, redirect_uri, scope, state, code_challenge, code_challenge_method=S256
+
     Browser->>AuthServer: 3. GET /oauth/authorize
     AuthServer->>User: 4. Display login & consent page
-    
+
     User->>AuthServer: 5. Authenticate & approve
     AuthServer->>AuthServer: 6. Generate authorization code
     AuthServer->>Browser: 7. Redirect to redirect_uri with code
-    
+
     Browser->>Client: 8. Return authorization code
     Client->>AuthServer: 9. POST /oauth/token (exchange code for token)
-    Note over Client,AuthServer: Client authenticates with client_id & client_secret
-    
+    Note over Client,AuthServer: Include code_verifier; confidential clients authenticate with client_secret
+
     AuthServer->>AuthServer: 10. Validate code & client
-    AuthServer->>Client: 11. Return access_token & refresh_token
-    
+    AuthServer->>Client: 11. Return access_token
+
     Client->>ResourceServer: 12. API Request with access_token
     ResourceServer->>ResourceServer: 13. Validate token
     ResourceServer->>Client: 14. Return protected resource
-    
+
     Client->>User: 15. Display protected resource
 ```
 
@@ -61,20 +63,24 @@ GET /oauth/authorize?
     client_id=YOUR_CLIENT_ID&
     redirect_uri=https://yourapp.com/callback&
     scope=read%20write&
-    state=random_state_string
+    state=random_state_string&
+    code_challenge=CODE_CHALLENGE_HERE&
+    code_challenge_method=S256
     HTTP/1.1
 Host: oauth2-server.example.com
 ```
 
 **Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `response_type` | Yes | Must be `code` for authorization code flow |
-| `client_id` | Yes | The client identifier |
-| `redirect_uri` | Yes | Where to redirect after authorization |
-| `scope` | No | Space-separated list of requested permissions |
-| `state` | Recommended | Random string for CSRF protection |
+| Parameter               | Required    | Description                                   |
+| ----------------------- | ----------- | --------------------------------------------- |
+| `response_type`         | Yes         | Must be `code` for authorization code flow    |
+| `client_id`             | Yes         | The client identifier                         |
+| `redirect_uri`          | Yes         | Where to redirect after authorization         |
+| `scope`                 | No          | Space-separated list of requested permissions |
+| `state`                 | Recommended | Random string for CSRF protection             |
+| `code_challenge`        | Yes         | PKCE challenge derived from `code_verifier`   |
+| `code_challenge_method` | Yes         | Must be `S256`                                |
 
 **Example cURL:**
 
@@ -85,7 +91,9 @@ response_type=code&\
 client_id=YOUR_CLIENT_ID&\
 redirect_uri=http://localhost:3000/callback&\
 scope=read%20write&\
-state=$(openssl rand -hex 16)"
+state=$(openssl rand -hex 16)&\
+code_challenge=CODE_CHALLENGE_HERE&\
+code_challenge_method=S256"
 
 echo "Navigate to: $AUTH_URL"
 ```
@@ -93,23 +101,31 @@ echo "Navigate to: $AUTH_URL"
 **Example in JavaScript:**
 
 ```javascript
-function initiateOAuth() {
+async function initiateOAuth() {
+  // PKCE is required: generate verifier + challenge and keep the verifier for the token exchange.
+  const codeVerifier = generateCodeVerifier();
+  sessionStorage.setItem("pkce_code_verifier", codeVerifier);
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+
   const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: 'YOUR_CLIENT_ID',
-    redirect_uri: 'https://yourapp.com/callback',
-    scope: 'read write',
-    state: generateRandomState()
+    response_type: "code",
+    client_id: "YOUR_CLIENT_ID",
+    redirect_uri: "https://yourapp.com/callback",
+    scope: "read write",
+    state: generateRandomState(),
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
   });
-  
-  window.location.href = 
-    `https://oauth2-server.example.com/oauth/authorize?${params}`;
+
+  window.location.href = `https://oauth2-server.example.com/oauth/authorize?${params}`;
 }
 
 function generateRandomState() {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
 }
 ```
 
@@ -168,10 +184,10 @@ Location: https://yourapp.com/callback?
 
 **Success Response Parameters:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `code` | The authorization code (single use, short-lived) |
-| `state` | The state parameter from the request (must match) |
+| Parameter | Description                                       |
+| --------- | ------------------------------------------------- |
+| `code`    | The authorization code (single use, short-lived)  |
+| `state`   | The state parameter from the request (must match) |
 
 **Error Response:**
 
@@ -185,15 +201,15 @@ Location: https://yourapp.com/callback?
 
 **Error Codes:**
 
-| Error | Description |
-|-------|-------------|
-| `invalid_request` | Missing or invalid parameters |
-| `unauthorized_client` | Client not authorized for this grant type |
-| `access_denied` | User denied the authorization request |
+| Error                       | Description                               |
+| --------------------------- | ----------------------------------------- |
+| `invalid_request`           | Missing or invalid parameters             |
+| `unauthorized_client`       | Client not authorized for this grant type |
+| `access_denied`             | User denied the authorization request     |
 | `unsupported_response_type` | Server doesn't support this response type |
-| `invalid_scope` | Requested scope is invalid |
-| `server_error` | Internal server error |
-| `temporarily_unavailable` | Server is temporarily unavailable |
+| `invalid_scope`             | Requested scope is invalid                |
+| `server_error`              | Internal server error                     |
+| `temporarily_unavailable`   | Server is temporarily unavailable         |
 
 ### Step 4: Handle Callback
 
@@ -202,27 +218,27 @@ The application receives the authorization code and validates the state paramete
 **Node.js Example:**
 
 ```javascript
-app.get('/callback', async (req, res) => {
+app.get("/callback", async (req, res) => {
   const { code, state, error } = req.query;
-  
+
   // Check for errors
   if (error) {
     return res.status(400).send(`Authorization failed: ${error}`);
   }
-  
+
   // Validate state (CSRF protection)
   const expectedState = req.session.oauthState;
   if (state !== expectedState) {
-    return res.status(400).send('Invalid state parameter');
+    return res.status(400).send("Invalid state parameter");
   }
-  
+
   // Exchange code for token (next step)
   try {
     const tokens = await exchangeCodeForToken(code);
     req.session.accessToken = tokens.access_token;
-    res.redirect('/dashboard');
+    res.redirect("/dashboard");
   } catch (err) {
-    res.status(500).send('Token exchange failed');
+    res.status(500).send("Token exchange failed");
   }
 });
 ```
@@ -235,16 +251,16 @@ def callback():
     code = request.args.get('code')
     state = request.args.get('state')
     error = request.args.get('error')
-    
+
     # Check for errors
     if error:
         return f'Authorization failed: {error}', 400
-    
+
     # Validate state (CSRF protection)
     expected_state = session.get('oauth_state')
     if state != expected_state:
         return 'Invalid state parameter', 400
-    
+
     # Exchange code for token
     try:
         tokens = exchange_code_for_token(code)
@@ -269,18 +285,20 @@ grant_type=authorization_code&
 code=AUTH_CODE_HERE&
 redirect_uri=https://yourapp.com/callback&
 client_id=YOUR_CLIENT_ID&
-client_secret=YOUR_CLIENT_SECRET
+client_secret=YOUR_CLIENT_SECRET&
+code_verifier=CODE_VERIFIER_HERE
 ```
 
 **Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `grant_type` | Yes | Must be `authorization_code` |
-| `code` | Yes | The authorization code from step 3 |
-| `redirect_uri` | Yes | Must match the redirect_uri from step 1 |
-| `client_id` | Yes | The client identifier |
-| `client_secret` | Yes | The client secret |
+| Parameter       | Required    | Description                                   |
+| --------------- | ----------- | --------------------------------------------- |
+| `grant_type`    | Yes         | Must be `authorization_code`                  |
+| `code`          | Yes         | The authorization code from step 3            |
+| `redirect_uri`  | Yes         | Must match the redirect_uri from step 1       |
+| `client_id`     | Yes         | The client identifier                         |
+| `client_secret` | Conditional | Required for confidential clients             |
+| `code_verifier` | Yes         | PKCE verifier used to derive `code_challenge` |
 
 **cURL Example:**
 
@@ -291,7 +309,8 @@ curl -X POST http://localhost:8080/oauth/token \
   -d "code=AUTH_CODE_HERE" \
   -d "redirect_uri=http://localhost:3000/callback" \
   -d "client_id=YOUR_CLIENT_ID" \
-  -d "client_secret=YOUR_CLIENT_SECRET"
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code_verifier=CODE_VERIFIER_HERE"
 ```
 
 **Success Response:**
@@ -301,20 +320,18 @@ curl -X POST http://localhost:8080/oauth/token \
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "refresh_token": "refresh_1a2b3c4d5e6f7g8h9i0j",
   "scope": "read write"
 }
 ```
 
 **Response Fields:**
 
-| Field | Description |
-|-------|-------------|
-| `access_token` | JWT token for API access |
-| `token_type` | Always "Bearer" |
-| `expires_in` | Token lifetime in seconds |
-| `refresh_token` | Token for obtaining new access tokens |
-| `scope` | Granted scopes (may differ from requested) |
+| Field          | Description                                |
+| -------------- | ------------------------------------------ |
+| `access_token` | JWT token for API access                   |
+| `token_type`   | Always "Bearer"                            |
+| `expires_in`   | Token lifetime in seconds                  |
+| `scope`        | Granted scopes (may differ from requested) |
 
 **Error Response:**
 
@@ -348,16 +365,16 @@ curl -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
 
 ```javascript
 async function fetchProtectedResource() {
-  const response = await fetch('https://api.example.com/api/resource', {
+  const response = await fetch("https://api.example.com/api/resource", {
     headers: {
-      'Authorization': `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
-  
+
   if (!response.ok) {
-    throw new Error('Failed to fetch resource');
+    throw new Error("Failed to fetch resource");
   }
-  
+
   return await response.json();
 }
 ```
@@ -366,20 +383,22 @@ async function fetchProtectedResource() {
 
 Proof Key for Code Exchange (PKCE) adds an extra layer of security, especially for mobile and single-page applications.
 
+In this server, PKCE is required for all Authorization Code requests.
+
 ### PKCE Flow Diagram
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant AuthServer
-    
+
     Client->>Client: 1. Generate code_verifier
     Client->>Client: 2. Generate code_challenge = SHA256(code_verifier)
-    
+
     Note right of Client: Send code_challenge with auth request
     Client->>AuthServer: 3. GET /oauth/authorize with code_challenge
     AuthServer->>Client: 4. Return authorization code
-    
+
     Note right of Client: Send code_verifier with token request
     Client->>AuthServer: 5. POST /oauth/token with code + code_verifier
     AuthServer->>AuthServer: 6. Verify: SHA256(code_verifier) == code_challenge
@@ -400,9 +419,9 @@ function generateCodeVerifier() {
 
 function base64URLEncode(buffer) {
   return btoa(String.fromCharCode(...buffer))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 }
 ```
 
@@ -412,7 +431,7 @@ function base64URLEncode(buffer) {
 async function generateCodeChallenge(verifier) {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
-  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hash = await crypto.subtle.digest("SHA-256", data);
   return base64URLEncode(new Uint8Array(hash));
 }
 ```
@@ -449,10 +468,10 @@ Host: oauth2-server.example.com
 
 **Additional PKCE Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `code_challenge` | Yes | SHA256 hash of code_verifier |
-| `code_challenge_method` | Yes | `S256` (SHA256) or `plain` |
+| Parameter               | Required | Description                  |
+| ----------------------- | -------- | ---------------------------- |
+| `code_challenge`        | Yes      | SHA256 hash of code_verifier |
+| `code_challenge_method` | Yes      | Must be `S256`               |
 
 ### Step 3: Token Exchange with Code Verifier
 
@@ -468,7 +487,7 @@ client_id=YOUR_CLIENT_ID&
 code_verifier=CODE_VERIFIER_HERE
 ```
 
-**Note:** With PKCE, `client_secret` may not be required (depending on client type).
+**Note:** With PKCE, `client_secret` may not be required (depending on client type). Confidential clients should still authenticate to the token endpoint.
 
 ## Security Considerations
 
@@ -479,14 +498,14 @@ Always use and validate the state parameter:
 ```javascript
 // Before redirect
 const state = generateRandomString();
-sessionStorage.setItem('oauth_state', state);
+sessionStorage.setItem("oauth_state", state);
 
 // In callback
-const returnedState = new URLSearchParams(window.location.search).get('state');
-const expectedState = sessionStorage.getItem('oauth_state');
+const returnedState = new URLSearchParams(window.location.search).get("state");
+const expectedState = sessionStorage.getItem("oauth_state");
 
 if (returnedState !== expectedState) {
-  throw new Error('CSRF attack detected');
+  throw new Error("CSRF attack detected");
 }
 ```
 
@@ -521,7 +540,7 @@ Mobile apps and SPAs should:
 
 - Always use PKCE
 - Use S256 code challenge method
-- Never use plain method in production
+- Use `code_challenge_method=S256` (the `plain` method is rejected)
 
 ## Common Error Scenarios
 
@@ -535,7 +554,7 @@ Mobile apps and SPAs should:
 try {
   const tokens = await exchangeCodeForToken(code);
 } catch (error) {
-  if (error.error === 'invalid_grant') {
+  if (error.error === "invalid_grant") {
     // Restart authorization flow
     window.location.href = getAuthorizationUrl();
   }
@@ -586,16 +605,16 @@ import { useEffect, useState } from 'react';
 
 function useOAuth() {
   const [tokens, setTokens] = useState(null);
-  
+
   const initiateLogin = () => {
     const state = generateRandomString();
     const codeVerifier = generateCodeVerifier();
-    
+
     sessionStorage.setItem('oauth_state', state);
     sessionStorage.setItem('code_verifier', codeVerifier);
-    
+
     const codeChallenge = await generateCodeChallenge(codeVerifier);
-    
+
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.REACT_APP_CLIENT_ID,
@@ -605,22 +624,22 @@ function useOAuth() {
       code_challenge: codeChallenge,
       code_challenge_method: 'S256'
     });
-    
-    window.location.href = 
+
+    window.location.href =
       `${process.env.REACT_APP_AUTH_SERVER}/oauth/authorize?${params}`;
   };
-  
+
   const handleCallback = async () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
-    
+
     // Validate state
     const expectedState = sessionStorage.getItem('oauth_state');
     if (state !== expectedState) {
       throw new Error('Invalid state');
     }
-    
+
     // Exchange code for token
     const codeVerifier = sessionStorage.getItem('code_verifier');
     const response = await fetch('/api/token', {
@@ -628,15 +647,15 @@ function useOAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, code_verifier })
     });
-    
+
     const tokens = await response.json();
     setTokens(tokens);
-    
+
     // Clean up
     sessionStorage.removeItem('oauth_state');
     sessionStorage.removeItem('code_verifier');
   };
-  
+
   return { tokens, initiateLogin, handleCallback };
 }
 ```
@@ -644,34 +663,34 @@ function useOAuth() {
 ### Backend (Node.js/Express)
 
 ```javascript
-const express = require('express');
-const axios = require('axios');
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
 
-app.post('/api/token', async (req, res) => {
+app.post("/api/token", async (req, res) => {
   const { code, code_verifier } = req.body;
-  
+
   try {
     const response = await axios.post(
       `${process.env.AUTH_SERVER}/oauth/token`,
       new URLSearchParams({
-        grant_type: 'authorization_code',
+        grant_type: "authorization_code",
         code,
         redirect_uri: process.env.REDIRECT_URI,
         client_id: process.env.CLIENT_ID,
         client_secret: process.env.CLIENT_SECRET,
-        code_verifier
+        code_verifier,
       }),
       {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       }
     );
-    
+
     res.json(response.data);
   } catch (error) {
     res.status(error.response?.status || 500).json({
-      error: error.response?.data || 'Token exchange failed'
+      error: error.response?.data || "Token exchange failed",
     });
   }
 });

@@ -25,7 +25,7 @@ graph LR
     A --> F[Observability]
     A --> G[Discovery]
   A --> H[Eventing]
-    
+
     style A fill:#ff9800,color:#fff
     style B fill:#4caf50,color:#fff
     style C fill:#2196f3,color:#fff
@@ -43,15 +43,15 @@ Initiate the authorization code flow.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `response_type` | string | Yes | Must be `code` |
-| `client_id` | string | Yes | Client identifier |
-| `redirect_uri` | string | Yes | Callback URL |
-| `scope` | string | No | Space-separated scopes |
-| `state` | string | Recommended | CSRF protection token |
-| `code_challenge` | string | No | PKCE challenge |
-| `code_challenge_method` | string | No | `S256` or `plain` |
+| Parameter               | Type   | Required    | Description               |
+| ----------------------- | ------ | ----------- | ------------------------- |
+| `response_type`         | string | Yes         | Must be `code`            |
+| `client_id`             | string | Yes         | Client identifier         |
+| `redirect_uri`          | string | Yes         | Callback URL              |
+| `scope`                 | string | No          | Space-separated scopes    |
+| `state`                 | string | Recommended | CSRF protection token     |
+| `code_challenge`        | string | Yes         | PKCE challenge (required) |
+| `code_challenge_method` | string | Yes         | Must be `S256`            |
 
 **Example:**
 
@@ -68,7 +68,7 @@ Location: http://localhost:3000/callback?code=AUTH_CODE&state=xyz789
 
 ### Token Endpoint
 
-Exchange authorization code, refresh token, or credentials for access token.
+Exchange an authorization code or client credentials for an access token.
 
 **Endpoint:** `POST /oauth/token`
 
@@ -82,6 +82,7 @@ Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code&
 code=AUTH_CODE&
+code_verifier=CODE_VERIFIER&
 redirect_uri=http://localhost:3000/callback&
 client_id=abc123&
 client_secret=secret123
@@ -101,6 +102,9 @@ scope=read
 
 #### Refresh Token Grant
 
+!!! warning "Disabled by default"
+The `refresh_token` grant is intentionally disabled by default (OAuth 2.0 Security BCP). Requests will be rejected with `unsupported_grant_type`.
+
 ```http
 POST /oauth/token
 Content-Type: application/x-www-form-urlencoded
@@ -112,6 +116,9 @@ client_secret=secret123
 ```
 
 #### Password Grant
+
+!!! warning "Disabled by default"
+The Resource Owner Password Credentials (ROPC) grant (`password`) is intentionally disabled by default. Requests will be rejected with `unsupported_grant_type`.
 
 ```http
 POST /oauth/token
@@ -131,7 +138,6 @@ client_secret=secret123
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "refresh_token": "refresh_abc123",
   "scope": "read write"
 }
 ```
@@ -153,11 +159,11 @@ Validate and get metadata about an access token.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `token` | string | Yes | Token to introspect |
-| `client_id` | string | No | Client identifier |
-| `client_secret` | string | No | Client secret |
+| Parameter       | Type   | Required | Description         |
+| --------------- | ------ | -------- | ------------------- |
+| `token`         | string | Yes      | Token to introspect |
+| `client_id`     | string | No       | Client identifier   |
+| `client_secret` | string | No       | Client secret       |
 
 **Example:**
 
@@ -198,12 +204,12 @@ Revoke an access or refresh token.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `token` | string | Yes | Token to revoke |
-| `token_type_hint` | string | No | `access_token` or `refresh_token` |
-| `client_id` | string | Yes | Client identifier |
-| `client_secret` | string | Yes | Client secret |
+| Parameter         | Type   | Required | Description                       |
+| ----------------- | ------ | -------- | --------------------------------- |
+| `token`           | string | Yes      | Token to revoke                   |
+| `token_type_hint` | string | No       | `access_token` or `refresh_token` |
+| `client_id`       | string | Yes      | Client identifier                 |
+| `client_secret`   | string | Yes      | Client secret                     |
 
 **Example:**
 
@@ -237,10 +243,7 @@ Register a new OAuth2 client.
     "http://localhost:3000/callback",
     "http://localhost:3000/silent-renew"
   ],
-  "grant_types": [
-    "authorization_code",
-    "refresh_token"
-  ],
+  "grant_types": ["authorization_code", "client_credentials"],
   "scope": "read write profile"
 }
 ```
@@ -256,10 +259,7 @@ Register a new OAuth2 client.
     "http://localhost:3000/callback",
     "http://localhost:3000/silent-renew"
   ],
-  "grant_types": [
-    "authorization_code",
-    "refresh_token"
-  ],
+  "grant_types": ["authorization_code", "refresh_token"],
   "scope": "read write profile",
   "created_at": "2024-01-01T00:00:00Z"
 }
@@ -283,35 +283,21 @@ Get OAuth2 server metadata.
   "introspection_endpoint": "http://localhost:8080/oauth/introspect",
   "revocation_endpoint": "http://localhost:8080/oauth/revoke",
   "jwks_uri": "http://localhost:8080/.well-known/jwks.json",
-  "response_types_supported": [
-    "code"
-  ],
+  "response_types_supported": ["code"],
   "grant_types_supported": [
     "authorization_code",
     "client_credentials",
     "refresh_token",
     "password"
   ],
-  "subject_types_supported": [
-    "public"
-  ],
-  "id_token_signing_alg_values_supported": [
-    "HS256"
-  ],
-  "scopes_supported": [
-    "read",
-    "write",
-    "profile",
-    "email"
-  ],
+  "subject_types_supported": ["public"],
+  "id_token_signing_alg_values_supported": ["HS256"],
+  "scopes_supported": ["read", "write", "profile", "email"],
   "token_endpoint_auth_methods_supported": [
     "client_secret_post",
     "client_secret_basic"
   ],
-  "code_challenge_methods_supported": [
-    "S256",
-    "plain"
-  ]
+  "code_challenge_methods_supported": ["S256", "plain"]
 }
 ```
 
@@ -468,8 +454,8 @@ Handle OAuth provider callbacks.
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter  | Type   | Description                                     |
+| ---------- | ------ | ----------------------------------------------- |
 | `provider` | string | Provider name (google, microsoft, github, etc.) |
 
 ### Logout
@@ -524,16 +510,16 @@ All endpoints return errors in the following format:
 
 ### Common Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `invalid_request` | 400 | Malformed or missing parameters |
-| `invalid_client` | 401 | Invalid client credentials |
-| `invalid_grant` | 400 | Invalid authorization code or token |
-| `unauthorized_client` | 400 | Client not authorized for this operation |
-| `unsupported_grant_type` | 400 | Grant type not supported |
-| `invalid_scope` | 400 | Requested scope is invalid |
-| `server_error` | 500 | Internal server error |
-| `temporarily_unavailable` | 503 | Server temporarily unavailable |
+| Code                      | HTTP Status | Description                              |
+| ------------------------- | ----------- | ---------------------------------------- |
+| `invalid_request`         | 400         | Malformed or missing parameters          |
+| `invalid_client`          | 401         | Invalid client credentials               |
+| `invalid_grant`           | 400         | Invalid authorization code or token      |
+| `unauthorized_client`     | 400         | Client not authorized for this operation |
+| `unsupported_grant_type`  | 400         | Grant type not supported                 |
+| `invalid_scope`           | 400         | Requested scope is invalid               |
+| `server_error`            | 500         | Internal server error                    |
+| `temporarily_unavailable` | 503         | Server temporarily unavailable           |
 
 ## Authentication
 
