@@ -294,7 +294,9 @@ async fn handle_authorization_code_grant(
         .ok_or_else(|| OAuth2Error::invalid_request("Missing code"))?;
 
     if matches!(req.redirect_uri.as_deref(), Some("")) {
-        return Err(OAuth2Error::invalid_request("redirect_uri must not be empty"));
+        return Err(OAuth2Error::invalid_request(
+            "redirect_uri must not be empty",
+        ));
     }
 
     // Validate authorization code
