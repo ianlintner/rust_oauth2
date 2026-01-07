@@ -13,87 +13,87 @@ graph TB
         MobileApp[Mobile App]
         Service[Backend Service]
     end
-    
+
     subgraph LoadBalancer[Load Balancer]
         LB[Load Balancer]
     end
-    
+
     subgraph OAuth2ServerInstances[OAuth2 Server Instances]
         Server1[OAuth2 Server 1]
         Server2[OAuth2 Server 2]
         Server3[OAuth2 Server 3]
     end
-    
+
     subgraph MiddlewareLayer[Middleware Layer]
         Auth[Auth Middleware]
         Metrics[Metrics Middleware]
         Tracing[Tracing Middleware]
         CORS[CORS Middleware]
     end
-    
+
     subgraph HandlerLayer[Handler Layer]
         OAuthHandler[OAuth Handler]
         TokenHandler[Token Handler]
         ClientHandler[Client Handler]
         AdminHandler[Admin Handler]
     end
-    
+
     subgraph ActorLayer[Actor Layer]
         TokenActor[Token Actor]
         ClientActor[Client Actor]
         AuthActor[Auth Actor]
     end
-    
+
     subgraph DataLayer[Data Layer]
         DB[(PostgreSQL/SQLite)]
         Cache[Redis Cache]
     end
-    
+
     subgraph Observability
         Prometheus[Prometheus]
         Jaeger[Jaeger]
         Logs[Log Aggregator]
     end
-    
+
     WebApp --> LB
     MobileApp --> LB
     Service --> LB
-    
+
     LB --> Server1
     LB --> Server2
     LB --> Server3
-    
+
     Server1 --> Auth
     Server2 --> Auth
     Server3 --> Auth
-    
+
     Auth --> Metrics
     Metrics --> Tracing
     Tracing --> CORS
-    
+
     CORS --> OAuthHandler
     CORS --> TokenHandler
     CORS --> ClientHandler
     CORS --> AdminHandler
-    
+
     OAuthHandler --> AuthActor
     TokenHandler --> TokenActor
     ClientHandler --> ClientActor
     AdminHandler --> ClientActor
-    
+
     TokenActor --> DB
     ClientActor --> DB
     AuthActor --> DB
-    
+
     TokenActor -.-> Cache
     ClientActor -.-> Cache
-    
+
     Metrics --> Prometheus
     Tracing --> Jaeger
     Server1 --> Logs
     Server2 --> Logs
     Server3 --> Logs
-    
+
     style WebApp fill:#e1f5ff
     style MobileApp fill:#e1f5ff
     style Service fill:#e1f5ff
@@ -143,24 +143,24 @@ graph LR
     subgraph ActorSystem[Actor System]
         Request[HTTP Request] --> Router[Router]
         Router --> Handler[Request Handler]
-        
+
         Handler --> TokenActor
         Handler --> ClientActor
         Handler --> AuthActor
-        
+
         TokenActor --> Message1[Token Message]
         ClientActor --> Message2[Client Message]
         AuthActor --> Message3[Auth Message]
-        
+
         Message1 --> DB[(Database)]
         Message2 --> DB
         Message3 --> DB
-        
+
         DB --> Response1[Response]
         Response1 --> Handler
         Handler --> Response[HTTP Response]
     end
-    
+
     style Request fill:#e1f5ff
     style Response fill:#e8f5e9
     style DB fill:#f3e5f5
@@ -200,7 +200,7 @@ erDiagram
     CLIENTS ||--o{ AUTHORIZATION_CODES : creates
     USERS ||--o{ TOKENS : owns
     USERS ||--o{ AUTHORIZATION_CODES : authorizes
-    
+
     CLIENTS {
         text id PK "UUID primary key"
         text client_id UK "Unique client identifier"
@@ -212,7 +212,7 @@ erDiagram
         text created_at "ISO 8601 timestamp"
         text updated_at "ISO 8601 timestamp"
     }
-    
+
     TOKENS {
         text id PK "UUID primary key"
         text token_value UK "Token value"
@@ -224,7 +224,7 @@ erDiagram
         text created_at "ISO 8601 timestamp"
         integer revoked "Revocation status (0/1)"
     }
-    
+
     AUTHORIZATION_CODES {
         text id PK "UUID primary key"
         text code UK "Authorization code"
@@ -238,7 +238,7 @@ erDiagram
         text created_at "ISO 8601 timestamp"
         integer used "Usage status (0/1)"
     }
-    
+
     USERS {
         text id PK "UUID primary key"
         text email UK "User email"
@@ -268,42 +268,42 @@ sequenceDiagram
     participant Actor as Actor System
     participant DB as Database
     participant Telemetry as Observability
-    
+
     Client->>LB: HTTP Request
     LB->>Server: Forward Request
-    
+
     Server->>MW: Process Request
     activate MW
-    
+
     MW->>MW: CORS Check
     MW->>MW: Auth Check
     MW->>MW: Start Trace Span
     MW->>Telemetry: Record Metrics
-    
+
     MW->>Handler: Validated Request
     deactivate MW
     activate Handler
-    
+
     Handler->>Actor: Send Message
     activate Actor
-    
+
     Actor->>DB: Query/Update
     activate DB
     DB-->>Actor: Result
     deactivate DB
-    
+
     Actor-->>Handler: Response
     deactivate Actor
-    
+
     Handler->>MW: HTTP Response
     deactivate Handler
     activate MW
-    
+
     MW->>Telemetry: Record Duration
     MW->>Telemetry: End Trace Span
     MW->>Server: Final Response
     deactivate MW
-    
+
     Server->>LB: HTTP Response
     LB->>Client: Forward Response
 ```
@@ -319,33 +319,33 @@ sequenceDiagram
     participant AuthActor as Auth Actor
     participant TokenActor as Token Actor
     participant DB as Database
-    
+
     User->>Client: Initiate Login
     Client->>Browser: Redirect to /oauth/authorize
     Browser->>OAuth2: GET /oauth/authorize
-    
+
     OAuth2->>AuthActor: ValidateAuthRequest
     AuthActor->>DB: Check Client
     DB-->>AuthActor: Client Valid
-    
+
     AuthActor-->>OAuth2: Request Valid
     OAuth2->>User: Show Login/Consent
-    
+
     User->>OAuth2: Approve
     OAuth2->>AuthActor: CreateAuthCode
     AuthActor->>DB: Store Auth Code
     DB-->>AuthActor: Code Stored
-    
+
     AuthActor-->>OAuth2: Authorization Code
     OAuth2->>Browser: Redirect with Code
     Browser->>Client: Return Code
-    
+
     Client->>OAuth2: POST /oauth/token
     OAuth2->>TokenActor: ExchangeCodeForToken
     TokenActor->>DB: Validate & Consume Code
     TokenActor->>DB: Create Token
     DB-->>TokenActor: Token Created
-    
+
     TokenActor-->>OAuth2: Access Token
     OAuth2->>Client: Return Token
     Client->>User: Authentication Complete
@@ -397,12 +397,12 @@ async fn token_handler(
 ) -> Result<HttpResponse, OAuth2Error> {
     // 1. Validate request
     req.validate()?;
-    
+
     // 2. Send message to actor
     let result = token_actor
         .send(CreateTokenMessage { /* ... */ })
         .await??;
-    
+
     // 3. Format response
     Ok(HttpResponse::Ok().json(result))
 }
@@ -453,47 +453,47 @@ graph TD
         FW[Firewall]
         DDoS[DDoS Protection]
     end
-    
+
     subgraph Layer2[Layer 2 - Application]
         CORS[CORS Policy]
         CSRF[CSRF Protection]
         RateLimit[Rate Limiting]
     end
-    
+
     subgraph Layer3[Layer 3 - Authentication]
         OAuth2Flow[OAuth2 Flows]
         PKCE[PKCE]
         Social[Social Login]
     end
-    
+
     subgraph Layer4[Layer 4 - Authorization]
         Scopes[Scope-Based Access]
         JWT[JWT Validation]
         TokenIntrospection[Token Introspection]
     end
-    
+
     subgraph Layer5[Layer 5 - Data]
         Encryption[Data Encryption]
         SecretMgmt[Secret Management]
         Hashing[Password Hashing]
     end
-    
+
     TLS --> CORS
     FW --> CORS
     DDoS --> CORS
-    
+
     CORS --> OAuth2Flow
     CSRF --> OAuth2Flow
     RateLimit --> OAuth2Flow
-    
+
     OAuth2Flow --> Scopes
     PKCE --> Scopes
     Social --> Scopes
-    
+
     Scopes --> Encryption
     JWT --> Encryption
     TokenIntrospection --> Encryption
-    
+
     style TLS fill:#f44336,color:#fff
     style CORS fill:#ff9800,color:#fff
     style OAuth2Flow fill:#ffc107
@@ -525,26 +525,26 @@ graph LR
         W3[Worker 3]
         W4[Worker 4]
     end
-    
+
     subgraph ActorSystem[Actor System]
         TA1[Token Actor 1]
         TA2[Token Actor 2]
         CA1[Client Actor 1]
         CA2[Client Actor 2]
     end
-    
+
     subgraph DatabasePool[Database Pool]
         Conn1[Connection 1]
         Conn2[Connection 2]
         Conn3[Connection 3]
         ConnN[Connection N]
     end
-    
+
     W1 --> TA1
     W2 --> TA2
     W3 --> CA1
     W4 --> CA2
-    
+
     TA1 --> Conn1
     TA2 --> Conn2
     CA1 --> Conn3
@@ -579,34 +579,34 @@ graph LR
 
 ### Core Technologies
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Language | Rust 2021 | Type safety, performance |
-| Web Framework | Actix-Web 4.x | HTTP server |
-| Actor Framework | Actix 0.13 | Concurrency |
-| Database | SQLx | Database access |
-| JWT | jsonwebtoken | Token handling |
-| Serialization | Serde | JSON processing |
-| OpenAPI | utoipa | API documentation |
+| Component       | Technology    | Purpose                  |
+| --------------- | ------------- | ------------------------ |
+| Language        | Rust 2021     | Type safety, performance |
+| Web Framework   | Actix-Web 4.x | HTTP server              |
+| Actor Framework | Actix 0.13    | Concurrency              |
+| Database        | SQLx          | Database access          |
+| JWT             | jsonwebtoken  | Token handling           |
+| Serialization   | Serde         | JSON processing          |
+| OpenAPI         | utoipa        | API documentation        |
 
 ### Observability Stack
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Metrics | Prometheus | Metrics collection |
-| Tracing | OpenTelemetry | Distributed tracing |
-| Logging | tracing-subscriber | Structured logging |
-| Monitoring | Grafana | Metrics visualization |
+| Component  | Technology         | Purpose               |
+| ---------- | ------------------ | --------------------- |
+| Metrics    | Prometheus         | Metrics collection    |
+| Tracing    | OpenTelemetry      | Distributed tracing   |
+| Logging    | tracing-subscriber | Structured logging    |
+| Monitoring | Grafana            | Metrics visualization |
 
 ### Infrastructure
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Container | Docker | Containerization |
-| Orchestration | Kubernetes | Container orchestration |
-| Database | PostgreSQL | Production database |
-| Migrations | Flyway | Schema management |
-| Reverse Proxy | Nginx/Traefik | Load balancing, TLS |
+| Component     | Technology    | Purpose                 |
+| ------------- | ------------- | ----------------------- |
+| Container     | Docker        | Containerization        |
+| Orchestration | Kubernetes    | Container orchestration |
+| Database      | PostgreSQL    | Production database     |
+| Migrations    | Flyway        | Schema management       |
+| Reverse Proxy | Nginx/Traefik | Load balancing, TLS     |
 
 ## Design Principles
 
@@ -668,11 +668,11 @@ graph LR
     Defaults[Default Values] --> ConfigFile[Config File]
     ConfigFile --> EnvVars[Environment Variables]
     EnvVars --> FinalConfig[Final Configuration]
-    
+
     FinalConfig --> Validation{Validation}
     Validation -->|Pass| Server[Start Server]
     Validation -->|Fail| Error[Configuration Error]
-    
+
     style Defaults fill:#e3f2fd
     style EnvVars fill:#fff3e0
     style Server fill:#e8f5e9
@@ -693,7 +693,7 @@ graph TB
         OTLP --> Jaeger[Jaeger]
         OTLP --> Prometheus[Prometheus]
     end
-    
+
     style Internet fill:#e1f5ff
     style OAuth2 fill:#fff3e0
     style DB fill:#f3e5f5
@@ -704,22 +704,22 @@ graph TB
 ```mermaid
 graph TB
     Internet[Internet] --> LB[Load Balancer]
-    
+
     LB --> OAuth2_1[OAuth2 Server 1]
     LB --> OAuth2_2[OAuth2 Server 2]
     LB --> OAuth2_3[OAuth2 Server 3]
-    
+
     OAuth2_1 --> DB_Primary[(PostgreSQL Primary)]
     OAuth2_2 --> DB_Primary
     OAuth2_3 --> DB_Primary
-    
+
     DB_Primary --> DB_Replica1[(PostgreSQL Replica 1)]
     DB_Primary --> DB_Replica2[(PostgreSQL Replica 2)]
-    
+
     OAuth2_1 --> Redis[(Redis Cache)]
     OAuth2_2 --> Redis
     OAuth2_3 --> Redis
-    
+
     style Internet fill:#e1f5ff
     style LB fill:#fff3e0
     style DB_Primary fill:#c8e6c9
