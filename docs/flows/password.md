@@ -2,8 +2,11 @@
 
 The Resource Owner Password Credentials (ROPC) Flow allows applications to directly exchange user credentials (username and password) for access tokens.
 
+!!! warning "Disabled by Default"
+This server disables the `password` grant by default (OAuth 2.0 Security BCP). Requests will be rejected with `unsupported_grant_type`.
+
 !!! danger "Not Recommended"
-    This flow should only be used when other flows are not viable. It requires users to share their passwords directly with the client application, which reduces security.
+This flow should only be used when other flows are not viable. It requires users to share their passwords directly with the client application, which reduces security.
 
 ## When to Use (Rarely)
 
@@ -27,18 +30,15 @@ sequenceDiagram
     participant User as Resource Owner (User)
     participant Client as Client Application (Trusted App)
     participant AuthServer as Authorization Server
-    
+
     User->>Client: 1. Enter username & password
     Note right of Client: grant_type=password
     Client->>AuthServer: 2. POST /oauth/token
     Note over Client,AuthServer: Includes username, password, client_id, client_secret
-    
-    AuthServer->>AuthServer: 3. Validate credentials
-    AuthServer->>AuthServer: 4. Validate client
-    AuthServer->>AuthServer: 5. Generate tokens
-    
-    AuthServer->>Client: 6. Return access_token & refresh_token
-    Client->>User: 7. Authentication complete
+
+    AuthServer->>AuthServer: 3. Reject password grant (default)
+    AuthServer->>Client: 4. Error: unsupported_grant_type
+    Client->>User: 5. Authentication failed
 ```
 
 ## Implementation
@@ -62,28 +62,38 @@ scope=read write
 
 **Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `grant_type` | Yes | Must be `password` |
-| `username` | Yes | User's username or email |
-| `password` | Yes | User's password |
-| `client_id` | Yes | The client identifier |
-| `client_secret` | Yes | The client secret |
-| `scope` | No | Requested scopes |
+| Parameter       | Required | Description              |
+| --------------- | -------- | ------------------------ |
+| `grant_type`    | Yes      | Must be `password`       |
+| `username`      | Yes      | User's username or email |
+| `password`      | Yes      | User's password          |
+| `client_id`     | Yes      | The client identifier    |
+| `client_secret` | Yes      | The client secret        |
+| `scope`         | No       | Requested scopes         |
 
-### Success Response
+### Response (Default)
+
+By default, the server rejects the password grant:
+
+```json
+{
+  "error": "unsupported_grant_type",
+  "error_description": "The grant_type is not supported"
+}
+```
+
+### Success Response (When Enabled)
 
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "refresh_token": "refresh_1a2b3c4d5e6f7g8h9i0j",
   "scope": "read write"
 }
 ```
 
-### Error Response
+### Error Response (When Enabled)
 
 ```json
 {
@@ -93,6 +103,8 @@ scope=read write
 ```
 
 ## Code Examples
+
+These requests will be rejected by default unless you explicitly enable the `password` grant.
 
 ### cURL
 
@@ -112,38 +124,38 @@ curl -X POST http://localhost:8080/oauth/token \
 ```javascript
 async function loginWithPassword(username, password) {
   const params = new URLSearchParams({
-    grant_type: 'password',
+    grant_type: "password",
     username: username,
     password: password,
     client_id: process.env.CLIENT_ID,
     client_secret: process.env.CLIENT_SECRET,
-    scope: 'read write'
+    scope: "read write",
   });
-  
+
   try {
-    const response = await fetch('http://localhost:8080/oauth/token', {
-      method: 'POST',
+    const response = await fetch("http://localhost:8080/oauth/token", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: params
+      body: params,
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error_description || 'Authentication failed');
+      throw new Error(error.error_description || "Authentication failed");
     }
-    
+
     return await response.json();
   } catch (error) {
-    console.error('Login failed:', error);
+    console.error("Login failed:", error);
     throw error;
   }
 }
 
 // Usage
-const tokens = await loginWithPassword('user@example.com', 'password123');
-console.log('Access token:', tokens.access_token);
+const tokens = await loginWithPassword("user@example.com", "password123");
+console.log("Access token:", tokens.access_token);
 ```
 
 ### Python
@@ -154,7 +166,7 @@ import os
 
 def login_with_password(username, password):
     url = 'http://localhost:8080/oauth/token'
-    
+
     data = {
         'grant_type': 'password',
         'username': username,
@@ -163,10 +175,10 @@ def login_with_password(username, password):
         'client_secret': os.environ['CLIENT_SECRET'],
         'scope': 'read write'
     }
-    
+
     response = requests.post(url, data=data)
     response.raise_for_status()
-    
+
     return response.json()
 
 # Usage
@@ -201,18 +213,18 @@ Never store passwords in plain text:
 // Server-side validation (example)
 async function validateCredentials(username, password) {
   const user = await db.findUserByUsername(username);
-  
+
   if (!user) {
-    throw new Error('Invalid credentials');
+    throw new Error("Invalid credentials");
   }
-  
+
   // ✅ Use secure password hashing (Argon2, bcrypt)
   const valid = await argon2.verify(user.password_hash, password);
-  
+
   if (!valid) {
-    throw new Error('Invalid credentials');
+    throw new Error("Invalid credentials");
   }
-  
+
   return user;
 }
 ```
@@ -225,12 +237,12 @@ Implement aggressive rate limiting:
 // Rate limit password grant requests
 const rateLimiter = {
   maxAttempts: 5,
-  windowMs: 15 * 60 * 1000 // 15 minutes
+  windowMs: 15 * 60 * 1000, // 15 minutes
 };
 
 // Lockout after failed attempts
 if (failedAttempts >= 5) {
-  throw new Error('Account temporarily locked');
+  throw new Error("Account temporarily locked");
 }
 ```
 
@@ -246,9 +258,9 @@ async function auditLoginAttempt(username, success, clientId, ipAddress) {
     clientId,
     ipAddress,
     timestamp: new Date(),
-    grantType: 'password'
+    grantType: "password",
   });
-  
+
   // Alert on suspicious patterns
   if (!success) {
     await checkForBruteForce(username, ipAddress);
@@ -291,8 +303,8 @@ if (user.usingPasswordFlow) {
 
 ```javascript
 // Eventually disable password flow
-if (grantType === 'password') {
-  throw new Error('Password flow deprecated. Use authorization code flow.');
+if (grantType === "password") {
+  throw new Error("Password flow deprecated. Use authorization code flow.");
 }
 ```
 
@@ -318,34 +330,34 @@ async function loginWithErrorHandling(username, password) {
   } catch (error) {
     if (error.response?.data?.error) {
       const { error: code, error_description } = error.response.data;
-      
+
       switch (code) {
-        case 'invalid_grant':
+        case "invalid_grant":
           return {
             success: false,
-            message: 'Invalid username or password'
+            message: "Invalid username or password",
           };
-          
-        case 'unauthorized_client':
+
+        case "unauthorized_client":
           return {
             success: false,
-            message: 'This application cannot use password authentication'
+            message: "This application cannot use password authentication",
           };
-          
-        case 'invalid_scope':
+
+        case "invalid_scope":
           return {
             success: false,
-            message: 'Requested permissions not available'
+            message: "Requested permissions not available",
           };
-          
+
         default:
           return {
             success: false,
-            message: 'Authentication failed'
+            message: "Authentication failed",
           };
       }
     }
-    
+
     throw error;
   }
 }
@@ -387,18 +399,18 @@ const tokens = await getClientCredentialsToken();
 ## Complete Example: CLI Tool
 
 ```javascript
-const readline = require('readline');
-const axios = require('axios');
+const readline = require("readline");
+const axios = require("axios");
 
 class CLIAuthenticator {
   constructor(config) {
     this.config = config;
     this.rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout
+      output: process.stdout,
     });
   }
-  
+
   async prompt(question) {
     return new Promise((resolve) => {
       this.rl.question(question, (answer) => {
@@ -406,79 +418,75 @@ class CLIAuthenticator {
       });
     });
   }
-  
+
   async promptPassword(question) {
     return new Promise((resolve) => {
       const stdin = process.stdin;
       stdin.setRawMode(true);
       stdin.resume();
-      stdin.setEncoding('utf8');
-      
+      stdin.setEncoding("utf8");
+
       process.stdout.write(question);
-      
-      let password = '';
-      stdin.on('data', (char) => {
-        if (char === '\n' || char === '\r' || char === '\u0004') {
+
+      let password = "";
+      stdin.on("data", (char) => {
+        if (char === "\n" || char === "\r" || char === "\u0004") {
           stdin.setRawMode(false);
           stdin.pause();
-          process.stdout.write('\n');
+          process.stdout.write("\n");
           resolve(password);
-        } else if (char === '\u0003') {
+        } else if (char === "\u0003") {
           process.exit();
-        } else if (char === '\u007f') {
+        } else if (char === "\u007f") {
           password = password.slice(0, -1);
         } else {
           password += char;
-          process.stdout.write('*');
+          process.stdout.write("*");
         }
       });
     });
   }
-  
+
   async login() {
-    console.log('=== Login ===');
-    const username = await this.prompt('Username: ');
-    const password = await this.promptPassword('Password: ');
-    
+    console.log("=== Login ===");
+    const username = await this.prompt("Username: ");
+    const password = await this.promptPassword("Password: ");
+
     try {
       const tokens = await this.authenticateWithPassword(username, password);
-      console.log('\n✓ Login successful!');
-      
+      console.log("\n✓ Login successful!");
+
       // Store tokens securely
       await this.storeTokens(tokens);
-      
+
       return tokens;
     } catch (error) {
-      console.error('\n✗ Login failed:', error.message);
+      console.error("\n✗ Login failed:", error.message);
       throw error;
     } finally {
       this.rl.close();
     }
   }
-  
+
   async authenticateWithPassword(username, password) {
     const params = new URLSearchParams({
-      grant_type: 'password',
+      grant_type: "password",
       username,
       password,
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
-      scope: this.config.scope
+      scope: this.config.scope,
     });
-    
-    const response = await axios.post(
-      this.config.tokenUrl,
-      params,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-    
+
+    const response = await axios.post(this.config.tokenUrl, params, {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+
     return response.data;
   }
-  
+
   async storeTokens(tokens) {
     // Store in secure location (e.g., keychain, credential manager)
     // This is platform-specific
@@ -487,14 +495,15 @@ class CLIAuthenticator {
 
 // Usage
 const auth = new CLIAuthenticator({
-  tokenUrl: 'http://localhost:8080/oauth/token',
+  tokenUrl: "http://localhost:8080/oauth/token",
   clientId: process.env.CLIENT_ID,
   clientSecret: process.env.CLIENT_SECRET,
-  scope: 'read write'
+  scope: "read write",
 });
 
-auth.login()
-  .then(() => console.log('Ready to use CLI'))
+auth
+  .login()
+  .then(() => console.log("Ready to use CLI"))
   .catch(() => process.exit(1));
 ```
 

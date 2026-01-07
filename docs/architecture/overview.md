@@ -233,7 +233,7 @@ erDiagram
         text redirect_uri "Callback URL"
         text scope "Requested scopes"
         text code_challenge "PKCE challenge"
-        text code_challenge_method "S256 or plain"
+        text code_challenge_method "S256"
         text expires_at "ISO 8601 timestamp"
         text created_at "ISO 8601 timestamp"
         integer used "Usage status (0/1)"

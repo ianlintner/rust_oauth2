@@ -29,7 +29,7 @@ erDiagram
     CLIENTS ||--o{ AUTHORIZATION_CODES : "creates"
     USERS ||--o{ TOKENS : "owns"
     USERS ||--o{ AUTHORIZATION_CODES : "authorizes"
-    
+
     CLIENTS {
         text id PK "UUID primary key"
         text client_id UK "Unique client identifier"
@@ -41,7 +41,7 @@ erDiagram
         text created_at "ISO 8601 timestamp"
         text updated_at "ISO 8601 timestamp"
     }
-    
+
     USERS {
         text id PK "UUID primary key"
         text username UK "Unique username"
@@ -51,7 +51,7 @@ erDiagram
         text created_at "ISO 8601 timestamp"
         text updated_at "ISO 8601 timestamp"
     }
-    
+
     TOKENS {
         text id PK "UUID primary key"
         text access_token UK "JWT token value"
@@ -65,7 +65,7 @@ erDiagram
         text expires_at "ISO 8601 timestamp"
         integer revoked "Revocation status (0/1)"
     }
-    
+
     AUTHORIZATION_CODES {
         text id PK "UUID primary key"
         text code UK "Authorization code"
@@ -77,7 +77,7 @@ erDiagram
         text expires_at "ISO 8601 timestamp"
         integer used "Usage status (0/1)"
         text code_challenge "PKCE challenge"
-        text code_challenge_method "S256 or plain"
+        text code_challenge_method "S256"
     }
 ```
 
@@ -105,17 +105,17 @@ CREATE INDEX idx_clients_client_id ON clients(client_id);
 
 **Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT (UUID) | Primary key, internal identifier |
-| `client_id` | TEXT | Public client identifier (unique) |
-| `client_secret` | TEXT | Hashed client secret for authentication |
-| `redirect_uris` | TEXT (JSON) | Allowed redirect URIs as JSON array |
-| `grant_types` | TEXT (JSON) | Supported grant types as JSON array |
-| `scope` | TEXT | Space-separated list of allowed scopes |
-| `name` | TEXT | Human-readable client name |
-| `created_at` | TEXT (ISO 8601) | Creation timestamp |
-| `updated_at` | TEXT (ISO 8601) | Last update timestamp |
+| Field           | Type            | Description                             |
+| --------------- | --------------- | --------------------------------------- |
+| `id`            | TEXT (UUID)     | Primary key, internal identifier        |
+| `client_id`     | TEXT            | Public client identifier (unique)       |
+| `client_secret` | TEXT            | Hashed client secret for authentication |
+| `redirect_uris` | TEXT (JSON)     | Allowed redirect URIs as JSON array     |
+| `grant_types`   | TEXT (JSON)     | Supported grant types as JSON array     |
+| `scope`         | TEXT            | Space-separated list of allowed scopes  |
+| `name`          | TEXT            | Human-readable client name              |
+| `created_at`    | TEXT (ISO 8601) | Creation timestamp                      |
+| `updated_at`    | TEXT (ISO 8601) | Last update timestamp                   |
 
 **Example Data:**
 
@@ -125,7 +125,7 @@ CREATE INDEX idx_clients_client_id ON clients(client_id);
   "client_id": "web_app_client_abc123",
   "client_secret": "$argon2id$v=19$m=19456,t=2,p=1$...",
   "redirect_uris": "[\"https://app.example.com/callback\",\"https://app.example.com/silent-renew\"]",
-  "grant_types": "[\"authorization_code\",\"refresh_token\"]",
+  "grant_types": "[\"authorization_code\",\"client_credentials\"]",
   "scope": "read write profile",
   "name": "Example Web Application",
   "created_at": "2024-01-01T00:00:00Z",
@@ -154,15 +154,15 @@ CREATE INDEX idx_users_email ON users(email);
 
 **Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT (UUID) | Primary key, internal identifier |
-| `username` | TEXT | Unique username for login |
-| `password_hash` | TEXT | Argon2id password hash |
-| `email` | TEXT | User email address |
-| `enabled` | INTEGER | Account status (1=enabled, 0=disabled) |
-| `created_at` | TEXT (ISO 8601) | Account creation timestamp |
-| `updated_at` | TEXT (ISO 8601) | Last update timestamp |
+| Field           | Type            | Description                            |
+| --------------- | --------------- | -------------------------------------- |
+| `id`            | TEXT (UUID)     | Primary key, internal identifier       |
+| `username`      | TEXT            | Unique username for login              |
+| `password_hash` | TEXT            | Argon2id password hash                 |
+| `email`         | TEXT            | User email address                     |
+| `enabled`       | INTEGER         | Account status (1=enabled, 0=disabled) |
+| `created_at`    | TEXT (ISO 8601) | Account creation timestamp             |
+| `updated_at`    | TEXT (ISO 8601) | Last update timestamp                  |
 
 **Example Data:**
 
@@ -207,19 +207,19 @@ CREATE INDEX idx_tokens_user_id ON tokens(user_id);
 
 **Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT (UUID) | Primary key, internal identifier |
-| `access_token` | TEXT | JWT access token (unique) |
-| `refresh_token` | TEXT | Refresh token value (nullable) |
-| `token_type` | TEXT | Token type (usually "Bearer") |
-| `expires_in` | INTEGER | Token lifetime in seconds |
-| `scope` | TEXT | Space-separated granted scopes |
-| `client_id` | TEXT | Foreign key to clients table |
-| `user_id` | TEXT | Foreign key to users table |
-| `created_at` | TEXT (ISO 8601) | Token creation timestamp |
-| `expires_at` | TEXT (ISO 8601) | Token expiration timestamp |
-| `revoked` | INTEGER | Revocation status (1=revoked, 0=active) |
+| Field           | Type            | Description                                                                  |
+| --------------- | --------------- | ---------------------------------------------------------------------------- |
+| `id`            | TEXT (UUID)     | Primary key, internal identifier                                             |
+| `access_token`  | TEXT            | JWT access token (unique)                                                    |
+| `refresh_token` | TEXT            | Refresh token value (nullable; only populated if refresh tokens are enabled) |
+| `token_type`    | TEXT            | Token type (usually "Bearer")                                                |
+| `expires_in`    | INTEGER         | Token lifetime in seconds                                                    |
+| `scope`         | TEXT            | Space-separated granted scopes                                               |
+| `client_id`     | TEXT            | Foreign key to clients table                                                 |
+| `user_id`       | TEXT            | Foreign key to users table                                                   |
+| `created_at`    | TEXT (ISO 8601) | Token creation timestamp                                                     |
+| `expires_at`    | TEXT (ISO 8601) | Token expiration timestamp                                                   |
+| `revoked`       | INTEGER         | Revocation status (1=revoked, 0=active)                                      |
 
 **Example Data:**
 
@@ -227,7 +227,7 @@ CREATE INDEX idx_tokens_user_id ON tokens(user_id);
 {
   "id": "456f789a-bc12-34de-56fg-789012hij345",
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "refresh_1a2b3c4d5e6f7g8h9i0j",
+  "refresh_token": null,
   "token_type": "Bearer",
   "expires_in": 3600,
   "scope": "read write",
@@ -267,19 +267,19 @@ CREATE INDEX idx_authorization_codes_user_id ON authorization_codes(user_id);
 
 **Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | TEXT (UUID) | Primary key, internal identifier |
-| `code` | TEXT | Authorization code (unique) |
-| `client_id` | TEXT | Foreign key to clients table |
-| `user_id` | TEXT | Foreign key to users table |
-| `redirect_uri` | TEXT | Redirect URI for validation |
-| `scope` | TEXT | Requested scopes |
-| `created_at` | TEXT (ISO 8601) | Code creation timestamp |
-| `expires_at` | TEXT (ISO 8601) | Code expiration (usually 10 min) |
-| `used` | INTEGER | Usage status (1=used, 0=unused) |
-| `code_challenge` | TEXT | PKCE code challenge (optional) |
-| `code_challenge_method` | TEXT | PKCE method (S256 or plain) |
+| Field                   | Type            | Description                      |
+| ----------------------- | --------------- | -------------------------------- |
+| `id`                    | TEXT (UUID)     | Primary key, internal identifier |
+| `code`                  | TEXT            | Authorization code (unique)      |
+| `client_id`             | TEXT            | Foreign key to clients table     |
+| `user_id`               | TEXT            | Foreign key to users table       |
+| `redirect_uri`          | TEXT            | Redirect URI for validation      |
+| `scope`                 | TEXT            | Requested scopes                 |
+| `created_at`            | TEXT (ISO 8601) | Code creation timestamp          |
+| `expires_at`            | TEXT (ISO 8601) | Code expiration (usually 10 min) |
+| `used`                  | INTEGER         | Usage status (1=used, 0=unused)  |
+| `code_challenge`        | TEXT            | PKCE code challenge              |
+| `code_challenge_method` | TEXT            | PKCE method (`S256`)             |
 
 **Example Data:**
 
@@ -373,7 +373,7 @@ graph LR
     V3 --> V4[V4: Create Auth Codes]
     V4 --> V5[V5: Insert Default Data]
     V5 --> Ready[Database Ready]
-    
+
     style Start fill:#e3f2fd
     style Ready fill:#e8f5e9
 ```
@@ -398,12 +398,12 @@ let pool = SqlitePoolOptions::new()
 
 **Pool Configuration:**
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_connections` | 20 | Maximum number of connections |
-| `min_connections` | 5 | Minimum idle connections |
-| `connect_timeout` | 30s | Connection establishment timeout |
-| `idle_timeout` | 600s | Idle connection timeout |
+| Parameter         | Default | Description                      |
+| ----------------- | ------- | -------------------------------- |
+| `max_connections` | 20      | Maximum number of connections    |
+| `min_connections` | 5       | Minimum idle connections         |
+| `connect_timeout` | 30s     | Connection establishment timeout |
+| `idle_timeout`    | 600s    | Idle connection timeout          |
 
 ### Query Patterns
 
@@ -414,7 +414,7 @@ let pool = SqlitePoolOptions::new()
 let client = sqlx::query_as!(
     Client,
     r#"
-    SELECT id, client_id, client_secret, redirect_uris, 
+    SELECT id, client_id, client_secret, redirect_uris,
            grant_types, scope, name, created_at, updated_at
     FROM clients
     WHERE client_id = ?
@@ -477,7 +477,7 @@ stateDiagram-v2
     Active --> Revoked: Manual Revocation
     Expired --> [*]: Cleanup
     Revoked --> [*]: Cleanup
-    
+
     Active --> Refreshed: Refresh Token Flow
     Refreshed --> Active: New Token Issued
 ```
@@ -500,8 +500,8 @@ stateDiagram-v2
 
 ```sql
 -- Delete expired tokens (run periodically)
-DELETE FROM tokens 
-WHERE expires_at < datetime('now') 
+DELETE FROM tokens
+WHERE expires_at < datetime('now')
   AND created_at < datetime('now', '-7 days');
 ```
 
@@ -509,7 +509,7 @@ WHERE expires_at < datetime('now')
 
 ```sql
 -- Delete expired/used authorization codes
-DELETE FROM authorization_codes 
+DELETE FROM authorization_codes
 WHERE (used = 1 OR expires_at < datetime('now'))
   AND created_at < datetime('now', '-1 day');
 ```
@@ -522,15 +522,15 @@ Implement periodic cleanup in the application:
 // Schedule cleanup task
 tokio::spawn(async move {
     let mut interval = tokio::time::interval(Duration::from_hours(1));
-    
+
     loop {
         interval.tick().await;
-        
+
         // Cleanup expired tokens
         if let Err(e) = cleanup_expired_tokens(&pool).await {
             tracing::error!("Token cleanup failed: {}", e);
         }
-        
+
         // Cleanup authorization codes
         if let Err(e) = cleanup_auth_codes(&pool).await {
             tracing::error!("Auth code cleanup failed: {}", e);
@@ -600,7 +600,7 @@ sqlx::query!("SELECT * FROM users WHERE username = ?", username)
 ```sql
 -- Use EXPLAIN to analyze query performance
 EXPLAIN QUERY PLAN
-SELECT * FROM tokens 
+SELECT * FROM tokens
 WHERE client_id = ? AND revoked = 0;
 
 -- Ensure indexes are used
@@ -669,11 +669,13 @@ psql -h localhost -U oauth2_user oauth2_db < backup.sql
 ### Key Metrics to Monitor
 
 1. **Connection Pool Usage**
+
    - Active connections
    - Idle connections
    - Wait time for connections
 
 2. **Query Performance**
+
    - Query execution time
    - Slow query count
    - Failed query count
@@ -691,7 +693,7 @@ async fn check_database_health(pool: &Pool) -> Result<bool, Error> {
     let result = sqlx::query!("SELECT 1 as health_check")
         .fetch_one(pool)
         .await?;
-    
+
     Ok(result.health_check == 1)
 }
 ```

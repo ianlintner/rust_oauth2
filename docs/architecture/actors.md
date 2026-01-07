@@ -18,30 +18,30 @@ The Actor Model is a mathematical model of concurrent computation that treats "a
 graph TB
     subgraph ActorSystem[Actor System]
         Supervisor[Supervisor Actor]
-        
+
         subgraph WorkerActors[Worker Actors]
             TokenActor1[Token Actor 1]
             TokenActor2[Token Actor 2]
             ClientActor[Client Actor]
             AuthActor[Auth Actor]
         end
-        
+
         Supervisor -->|Manages| TokenActor1
         Supervisor -->|Manages| TokenActor2
         Supervisor -->|Manages| ClientActor
         Supervisor -->|Manages| AuthActor
-        
+
         TokenActor1 -->|Mailbox| Queue1[Message Queue]
         TokenActor2 -->|Mailbox| Queue2[Message Queue]
         ClientActor -->|Mailbox| Queue3[Message Queue]
         AuthActor -->|Mailbox| Queue4[Message Queue]
     end
-    
+
     Request1[Request 1] --> TokenActor1
     Request2[Request 2] --> TokenActor2
     Request3[Request 3] --> ClientActor
     Request4[Request 4] --> AuthActor
-    
+
     style Supervisor fill:#ff9800,color:#fff
     style TokenActor1 fill:#4caf50,color:#fff
     style TokenActor2 fill:#4caf50,color:#fff
@@ -58,21 +58,21 @@ graph TD
     System[Actor System] --> TokenActor[Token Actor]
     System --> ClientActor[Client Actor]
     System --> AuthActor[Auth Actor]
-    
+
     TokenActor --> CreateToken[Create Token Handler]
     TokenActor --> IntrospectToken[Introspect Token Handler]
     TokenActor --> RevokeToken[Revoke Token Handler]
     TokenActor --> RefreshToken[Refresh Token Handler]
-    
+
     ClientActor --> RegisterClient[Register Client Handler]
     ClientActor --> GetClient[Get Client Handler]
     ClientActor --> UpdateClient[Update Client Handler]
     ClientActor --> DeleteClient[Delete Client Handler]
-    
+
     AuthActor --> AuthorizeRequest[Authorize Request Handler]
     AuthActor --> ValidateAuthCode[Validate Auth Code Handler]
     AuthActor --> CreateAuthCode[Create Auth Code Handler]
-    
+
     style System fill:#ff5722,color:#fff
     style TokenActor fill:#4caf50,color:#fff
     style ClientActor fill:#2196f3,color:#fff
@@ -87,11 +87,14 @@ Manages all token-related operations.
 
 **Responsibilities:**
 
-- Create access and refresh tokens
+- Create access tokens (refresh tokens optional)
 - Validate tokens
 - Token introspection
 - Token revocation
 - Token expiration management
+
+!!! note
+Refresh token operations may be disabled by default depending on server configuration/security posture. The message types remain part of the architecture for deployments that explicitly enable refresh tokens.
 
 **Message Types:**
 
@@ -136,7 +139,7 @@ pub struct TokenActor {
 
 impl Actor for TokenActor {
     type Context = Context<Self>;
-    
+
     fn started(&mut self, _ctx: &mut Self::Context) {
         tracing::info!("TokenActor started");
     }
@@ -145,19 +148,19 @@ impl Actor for TokenActor {
 // Message handling
 impl Handler<CreateTokenMessage> for TokenActor {
     type Result = ResponseFuture<Result<TokenResponse, OAuth2Error>>;
-    
+
     fn handle(&mut self, msg: CreateTokenMessage, _ctx: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
         let jwt_secret = self.jwt_secret.clone();
         let expiration = self.access_token_expiration;
-        
+
         Box::pin(async move {
             // Create token logic
             let token = create_jwt_token(/* ... */)?;
-            
+
             // Store in database
             db.store_token(token).await?;
-            
+
             Ok(TokenResponse { /* ... */ })
         })
     }
@@ -172,17 +175,17 @@ sequenceDiagram
     participant TokenActor as Token Actor
     participant Mailbox as Actor Mailbox
     participant DB as Database
-    
+
     Handler->>TokenActor: Send CreateTokenMessage
     TokenActor->>Mailbox: Queue message
     Mailbox->>TokenActor: Dequeue & process
     activate TokenActor
-    
+
     TokenActor->>TokenActor: Generate JWT
     TokenActor->>TokenActor: Hash token
     TokenActor->>DB: Store token
     DB-->>TokenActor: Success
-    
+
     TokenActor-->>Handler: TokenResponse
     deactivate TokenActor
 ```
@@ -241,18 +244,18 @@ impl Actor for ClientActor {
 
 impl Handler<RegisterClientMessage> for ClientActor {
     type Result = ResponseFuture<Result<ClientCredentials, OAuth2Error>>;
-    
+
     fn handle(&mut self, msg: RegisterClientMessage, _ctx: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        
+
         Box::pin(async move {
             // Generate client credentials
             let client_id = generate_client_id();
             let client_secret = generate_client_secret();
-            
+
             // Store client
             db.create_client(/* ... */).await?;
-            
+
             Ok(ClientCredentials { /* ... */ })
         })
     }
@@ -317,18 +320,18 @@ impl Actor for AuthActor {
 
 impl Handler<CreateAuthCodeMessage> for AuthActor {
     type Result = ResponseFuture<Result<String, OAuth2Error>>;
-    
+
     fn handle(&mut self, msg: CreateAuthCodeMessage, _ctx: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
         let expiration = self.code_expiration;
-        
+
         Box::pin(async move {
             // Generate authorization code
             let code = generate_auth_code();
-            
+
             // Store in database
             db.create_auth_code(/* ... */).await?;
-            
+
             Ok(code)
         })
     }
@@ -347,7 +350,7 @@ sequenceDiagram
     participant Handler
     participant Actor
     participant DB
-    
+
     Client->>Handler: HTTP Request
     Handler->>Actor: Send Message
     activate Actor
@@ -377,11 +380,11 @@ sequenceDiagram
     participant Client
     participant Handler
     participant Actor
-    
+
     Client->>Handler: HTTP Request
     Handler->>Actor: Do(Message)
     Handler->>Client: HTTP Response (Accepted)
-    
+
     Note over Actor: Process later
     Actor->>Actor: Execute Task
 ```
@@ -403,7 +406,7 @@ sequenceDiagram
     participant AuthActor
     participant TokenActor
     participant DB
-    
+
     Handler->>AuthActor: Validate Auth Code
     activate AuthActor
     AuthActor->>DB: Check Code
@@ -444,13 +447,13 @@ graph LR
         T2[Thread 2] -.->|Lock| Shared
         T3[Thread 3] -.->|Lock| Shared
     end
-    
+
     subgraph ActorModel[Actor Model]
         A1[Actor 1] -->|Message| A2[Actor 2]
         A2 -->|Message| A3[Actor 3]
         A1 -->|Message| A3
     end
-    
+
     style Shared fill:#f44336,color:#fff
     style A1 fill:#4caf50,color:#fff
     style A2 fill:#4caf50,color:#fff
@@ -483,10 +486,10 @@ Actors can be supervised and automatically restarted on failure:
 graph TD
     Supervisor[Supervisor] -->|Monitors| A1[Actor 1]
     Supervisor -->|Monitors| A2[Actor 2]
-    
+
     A1 -->|Failure| Supervisor
     Supervisor -->|Restart| A1
-    
+
     style Supervisor fill:#ff9800,color:#fff
     style A1 fill:#f44336,color:#fff
     style A2 fill:#4caf50,color:#fff
@@ -542,7 +545,7 @@ impl Handler<BatchCreateTokenMessage> for TokenActor {
             let tokens = futures::future::join_all(
                 msg.requests.into_iter().map(|req| create_token(req))
             ).await;
-            
+
             Ok(tokens)
         })
     }
@@ -574,10 +577,10 @@ All message handlers are async, preventing blocking:
 ```rust
 impl Handler<DatabaseQueryMessage> for TokenActor {
     type Result = ResponseFuture<Result<QueryResult, Error>>;
-    
+
     fn handle(&mut self, msg: DatabaseQueryMessage, _: &mut Self::Context) -> Self::Result {
         let db = self.db.clone();
-        
+
         // Async execution doesn't block the actor
         Box::pin(async move {
             db.query(msg.sql).await
@@ -594,16 +597,16 @@ impl Handler<DatabaseQueryMessage> for TokenActor {
 #[actix_rt::test]
 async fn test_create_token() {
     let actor = TokenActor::new(/* ... */).start();
-    
+
     let msg = CreateTokenMessage {
         client_id: "test_client".to_string(),
         user_id: Some("test_user".to_string()),
         scope: "read write".to_string(),
         grant_type: GrantType::ClientCredentials,
     };
-    
+
     let result = actor.send(msg).await.unwrap();
-    
+
     assert!(result.is_ok());
     let token = result.unwrap();
     assert!(!token.access_token.is_empty());
@@ -616,24 +619,24 @@ async fn test_create_token() {
 #[actix_rt::test]
 async fn test_auth_flow_with_actors() {
     let system = System::new();
-    
+
     let auth_actor = AuthActor::new(/* ... */).start();
     let token_actor = TokenActor::new(/* ... */).start();
-    
+
     // Create auth code
     let code = auth_actor
         .send(CreateAuthCodeMessage { /* ... */ })
         .await
         .unwrap()
         .unwrap();
-    
+
     // Exchange for token
     let token = token_actor
         .send(ExchangeCodeMessage { code, /* ... */ })
         .await
         .unwrap()
         .unwrap();
-    
+
     assert!(!token.access_token.is_empty());
 }
 ```
@@ -663,7 +666,7 @@ impl Handler<Message> for MyActor {
 // ✅ Good: Async operation
 impl Handler<Message> for MyActor {
     type Result = ResponseFuture<Result<(), Error>>;
-    
+
     fn handle(&mut self, _msg: Message, _ctx: &mut Self::Context) -> Self::Result {
         Box::pin(async move {
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -685,7 +688,7 @@ impl Handler<CreateTokenMessage> for TokenActor {
             if msg.client_id.is_empty() {
                 return Err(OAuth2Error::InvalidClient);
             }
-            
+
             // Handle database errors
             let result = db.create_token(/* ... */).await;
             match result {
@@ -725,20 +728,20 @@ Track actor performance with metrics:
 impl Handler<CreateTokenMessage> for TokenActor {
     fn handle(&mut self, msg: CreateTokenMessage, _: &mut Self::Context) -> Self::Result {
         let start = std::time::Instant::now();
-        
+
         Box::pin(async move {
             let result = create_token_internal(msg).await;
-            
+
             // Record metrics
             let duration = start.elapsed();
             TOKEN_ACTOR_DURATION.observe(duration.as_secs_f64());
-            
+
             if result.is_ok() {
                 TOKEN_ACTOR_SUCCESS.inc();
             } else {
                 TOKEN_ACTOR_ERRORS.inc();
             }
-            
+
             result
         })
     }

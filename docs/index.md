@@ -257,7 +257,7 @@ curl -X POST http://localhost:8080/oauth/token \
 
 ### 🔒 Security First
 
-- PKCE support for public clients
+- PKCE required for Authorization Code flow (`S256` only)
 - Secure token storage with hashing
 - Scope-based authorization
 - Token revocation support
@@ -298,7 +298,7 @@ curl -X POST http://localhost:8080/clients/register \
   -d '{
     "client_name": "My Application",
     "redirect_uris": ["http://localhost:3000/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
+    "grant_types": ["authorization_code"],
     "scope": "read write"
   }'
 ```

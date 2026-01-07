@@ -259,7 +259,7 @@ Register a new OAuth2 client.
     "http://localhost:3000/callback",
     "http://localhost:3000/silent-renew"
   ],
-  "grant_types": ["authorization_code", "refresh_token"],
+  "grant_types": ["authorization_code", "client_credentials"],
   "scope": "read write profile",
   "created_at": "2024-01-01T00:00:00Z"
 }
@@ -284,12 +284,7 @@ Get OAuth2 server metadata.
   "revocation_endpoint": "http://localhost:8080/oauth/revoke",
   "jwks_uri": "http://localhost:8080/.well-known/jwks.json",
   "response_types_supported": ["code"],
-  "grant_types_supported": [
-    "authorization_code",
-    "client_credentials",
-    "refresh_token",
-    "password"
-  ],
+  "grant_types_supported": ["authorization_code", "client_credentials"],
   "subject_types_supported": ["public"],
   "id_token_signing_alg_values_supported": ["HS256"],
   "scopes_supported": ["read", "write", "profile", "email"],
@@ -297,7 +292,7 @@ Get OAuth2 server metadata.
     "client_secret_post",
     "client_secret_basic"
   ],
-  "code_challenge_methods_supported": ["S256", "plain"]
+  "code_challenge_methods_supported": ["S256"]
 }
 ```
 
