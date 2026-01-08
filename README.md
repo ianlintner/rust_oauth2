@@ -592,7 +592,7 @@ curl -X POST http://localhost:8080/clients/register \
 1. **Get Authorization Code**:
 
 ```text
-http://localhost:8080/oauth/authorize?response_type=code&client_id=CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read
+http://localhost:8080/oauth/authorize?response_type=code&client_id=CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read&code_challenge=CODE_CHALLENGE&code_challenge_method=S256
 ```
 
 1. **Exchange Code for Token**:
@@ -600,8 +600,10 @@ http://localhost:8080/oauth/authorize?response_type=code&client_id=CLIENT_ID&red
 ```bash
 curl -X POST http://localhost:8080/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code&code=AUTH_CODE&redirect_uri=http://localhost:3000/callback&client_id=CLIENT_ID&client_secret=CLIENT_SECRET"
+  -d "grant_type=authorization_code&code=AUTH_CODE&client_id=CLIENT_ID&client_secret=CLIENT_SECRET&code_verifier=CODE_VERIFIER"
 ```
+
+Note: `redirect_uri` is optional in the token request (OAuth 2.1). For backward compatibility, you may include it; if provided, it must exactly match the `redirect_uri` used at the authorization step.
 
 ### Client Credentials Flow
 

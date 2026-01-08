@@ -104,7 +104,7 @@ impl Handler<CreateAuthorizationCode> for AuthActor {
 pub struct ValidateAuthorizationCode {
     pub code: String,
     pub client_id: String,
-    pub redirect_uri: String,
+    pub redirect_uri: Option<String>,
     pub code_verifier: Option<String>,
     pub span: tracing::Span,
 }
@@ -165,8 +165,13 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                     return Err(OAuth2Error::invalid_grant("Client ID mismatch"));
                 }
 
-                if auth_code.redirect_uri != msg.redirect_uri {
-                    return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
+                // OAuth 2.1 removes redirect_uri from the authorization_code token request.
+                // For backward compatibility (OAuth 2.0 clients), we still accept it and
+                // enforce it when provided.
+                if let Some(redirect_uri) = msg.redirect_uri {
+                    if auth_code.redirect_uri != redirect_uri {
+                        return Err(OAuth2Error::invalid_grant("Redirect URI mismatch"));
+                    }
                 }
 
                 // Validate PKCE if present
@@ -175,10 +180,7 @@ impl Handler<ValidateAuthorizationCode> for AuthActor {
                         .code_verifier
                         .ok_or_else(|| OAuth2Error::invalid_grant("Code verifier required"))?;
 
-                    let method = auth_code
-                        .code_challenge_method
-                        .as_deref()
-                        .unwrap_or("plain");
+                    let method = auth_code.code_challenge_method.as_deref().unwrap_or("S256");
                     if !validate_pkce(challenge, &verifier, method) {
                         return Err(OAuth2Error::invalid_grant("Invalid code verifier"));
                     }
@@ -256,8 +258,14 @@ fn generate_code() -> String {
 }
 
 fn validate_pkce(challenge: &str, verifier: &str, method: &str) -> bool {
+    // RFC 7636: code_verifier length MUST be between 43 and 128 characters.
+    // We validate this early so short verifiers can't be used to weaken PKCE.
+    if verifier.len() < 43 || verifier.len() > 128 {
+        return false;
+    }
+
     match method {
-        "plain" => challenge == verifier,
+        // Only S256 is supported (OAuth 2.0 Security BCP guidance).
         "S256" => {
             use base64::{engine::general_purpose, Engine as _};
             use sha2::{Digest, Sha256};

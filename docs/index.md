@@ -14,19 +14,19 @@ graph TB
         Services[Backend Services]
         CLI[CLI Tools]
     end
-    
+
     subgraph OAuth2Server[OAuth2 Server]
         Auth[Authentication]
         Authz[Authorization]
         Tokens[Token Management]
     end
-    
+
     subgraph ProtectedResources[Protected Resources]
         API1[API Server 1]
         API2[API Server 2]
         Resources[(Protected Data)]
     end
-    
+
     WebApp --> Auth
     MobileApp --> Auth
     Services --> Auth
@@ -37,7 +37,7 @@ graph TB
     Tokens --> API2
     API1 --> Resources
     API2 --> Resources
-    
+
     style Auth fill:#ff9800,color:#fff
     style Authz fill:#4caf50,color:#fff
     style Tokens fill:#2196f3,color:#fff
@@ -45,7 +45,7 @@ graph TB
 
 ## 🚀 Features
 
-- ✅ Complete OAuth2 implementation with all standard flows
+- ✅ OAuth2 authorization server with secure defaults
 - 🎭 Actor model for concurrent request handling
 - 🔒 Type-safe Rust implementation
 - 📊 Prometheus metrics and OpenTelemetry tracing
@@ -63,23 +63,23 @@ graph TB
     Middleware --> Metrics[Metrics Middleware]
     Middleware --> Auth[Auth Middleware]
     Middleware --> Tracing[Tracing Middleware]
-    
+
     Metrics --> Prometheus[Prometheus Exporter]
     Tracing --> OTLP[OpenTelemetry Collector]
-    
+
     Gateway --> Handlers[HTTP Handlers]
     Handlers --> TokenHandler[Token Handler]
     Handlers --> AuthHandler[Auth Handler]
     Handlers --> ClientHandler[Client Handler]
-    
+
     TokenHandler --> TokenActor[Token Actor]
     AuthHandler --> AuthActor[Auth Actor]
     ClientHandler --> ClientActor[Client Actor]
-    
+
     TokenActor --> DB[(Database)]
     AuthActor --> DB
     ClientActor --> DB
-    
+
     style Client fill:#e1f5ff
     style Gateway fill:#fff3e0
     style DB fill:#f3e5f5
@@ -98,8 +98,9 @@ sequenceDiagram
     participant User
     participant Client
     participant OAuth2 as OAuth2 Server
-    
+
     User->>Client: Initiate Login
+  Note over Client,OAuth2: PKCE required (code_challenge_method=S256)
     Client->>OAuth2: GET /oauth/authorize
     OAuth2->>User: Show consent
     User->>OAuth2: Approve
@@ -120,7 +121,7 @@ For service-to-service authentication:
 sequenceDiagram
     participant Service
     participant OAuth2 as OAuth2 Server
-    
+
     Note right of Service: grant_type=client_credentials
     Service->>OAuth2: POST /oauth/token
     OAuth2->>Service: Access token
@@ -133,13 +134,16 @@ sequenceDiagram
 
 ### 3. Refresh Token Flow
 
+!!! warning "Disabled by Default"
+The `refresh_token` grant is disabled by default (OAuth 2.0 Security BCP). Requests will be rejected with `unsupported_grant_type`.
+
 Obtain new access tokens without re-authentication:
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant OAuth2 as OAuth2 Server
-    
+
     Note over Client: Access token expired
     Note right of Client: grant_type=refresh_token
     Client->>OAuth2: POST /oauth/token
@@ -152,8 +156,8 @@ sequenceDiagram
 
 ### 4. Password Grant Flow
 
-!!! warning "Not Recommended"
-    Only use for highly trusted, first-party applications.
+!!! warning "Disabled by Default"
+The Resource Owner Password Credentials (ROPC) grant (`password`) is disabled by default. Requests will be rejected with `unsupported_grant_type`.
 
 [Learn more →](flows/password.md)
 
@@ -215,8 +219,8 @@ curl -X POST http://localhost:8080/oauth/token \
 
 - **[Authorization Code](flows/authorization-code.md)** - Standard authorization flow
 - **[Client Credentials](flows/client-credentials.md)** - Service-to-service auth
-- **[Refresh Token](flows/refresh-token.md)** - Token refresh mechanism
-- **[Password Grant](flows/password.md)** - Resource owner password credentials
+- **[Refresh Token](flows/refresh-token.md)** - Token refresh mechanism (disabled by default)
+- **[Password Grant](flows/password.md)** - Resource owner password credentials (disabled by default)
 
 ### API Reference
 
@@ -253,7 +257,7 @@ curl -X POST http://localhost:8080/oauth/token \
 
 ### 🔒 Security First
 
-- PKCE support for public clients
+- PKCE required for Authorization Code flow (`S256` only)
 - Secure token storage with hashing
 - Scope-based authorization
 - Token revocation support
@@ -294,7 +298,7 @@ curl -X POST http://localhost:8080/clients/register \
   -d '{
     "client_name": "My Application",
     "redirect_uris": ["http://localhost:3000/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
+    "grant_types": ["authorization_code"],
     "scope": "read write"
   }'
 ```
@@ -350,4 +354,3 @@ This project is dual-licensed under MIT OR Apache-2.0.
 ---
 
 **Ready to get started?** Head over to the [Installation Guide](getting-started/installation.md)!
-

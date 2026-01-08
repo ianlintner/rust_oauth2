@@ -19,18 +19,18 @@ sequenceDiagram
     participant Client as Client Application (Service/CLI/Daemon)
     participant AuthServer as Authorization Server (OAuth2 Server)
     participant ResourceServer as Resource Server (API)
-    
+
     Note right of Client: grant_type=client_credentials
     Client->>AuthServer: 1. POST /oauth/token
     Note over Client,AuthServer: Authenticate with client_id & client_secret
-    
+
     AuthServer->>AuthServer: 2. Validate client credentials
     AuthServer->>AuthServer: 3. Check client permissions
     AuthServer->>AuthServer: 4. Generate access token
-    
+
     AuthServer->>Client: 5. Return access_token
     Note over AuthServer,Client: No refresh token (not needed for M2M)
-    
+
     Client->>ResourceServer: 6. API Request with access_token
     ResourceServer->>ResourceServer: 7. Validate token
     ResourceServer->>Client: 8. Return protected resource
@@ -47,7 +47,7 @@ graph LR
     ServiceA -->|API Call + Token| ServiceB[Service B]
     ServiceB -->|Validate Token| OAuth2
     ServiceB -->|Response| ServiceA
-    
+
     style ServiceA fill:#4caf50,color:#fff
     style ServiceB fill:#2196f3,color:#fff
     style OAuth2 fill:#ff9800,color:#fff
@@ -75,10 +75,10 @@ Fetching resources...
 def nightly_batch_job():
     # Authenticate
     token = get_client_credentials_token()
-    
+
     # Fetch data
     data = fetch_data_with_token(token)
-    
+
     # Process data
     process_data(data)
 ```
@@ -91,10 +91,10 @@ class APIClient {
   async authenticate() {
     this.token = await getClientCredentialsToken();
   }
-  
+
   async callAPI() {
     const response = await fetch(apiUrl, {
-      headers: { 'Authorization': `Bearer ${this.token}` }
+      headers: { Authorization: `Bearer ${this.token}` },
     });
     return response.json();
   }
@@ -120,12 +120,12 @@ scope=read write
 
 **Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `grant_type` | Yes | Must be `client_credentials` |
-| `client_id` | Yes | The client identifier |
-| `client_secret` | Yes | The client secret |
-| `scope` | No | Space-separated list of requested scopes |
+| Parameter       | Required | Description                              |
+| --------------- | -------- | ---------------------------------------- |
+| `grant_type`    | Yes      | Must be `client_credentials`             |
+| `client_id`     | Yes      | The client identifier                    |
+| `client_secret` | Yes      | The client secret                        |
+| `scope`         | No       | Space-separated list of requested scopes |
 
 ### Step 2: Receive Access Token
 
@@ -142,12 +142,12 @@ scope=read write
 
 **Response Fields:**
 
-| Field | Description |
-|-------|-------------|
-| `access_token` | JWT token for API access |
-| `token_type` | Always "Bearer" |
-| `expires_in` | Token lifetime in seconds |
-| `scope` | Granted scopes |
+| Field          | Description               |
+| -------------- | ------------------------- |
+| `access_token` | JWT token for API access  |
+| `token_type`   | Always "Bearer"           |
+| `expires_in`   | Token lifetime in seconds |
+| `scope`        | Granted scopes            |
 
 **Note:** No `refresh_token` is returned because the client can request a new access token at any time using its credentials.
 
@@ -176,30 +176,30 @@ curl -X POST http://localhost:8080/oauth/token \
 ### JavaScript/Node.js
 
 ```javascript
-const axios = require('axios');
+const axios = require("axios");
 
 async function getClientCredentialsToken() {
   const params = new URLSearchParams({
-    grant_type: 'client_credentials',
+    grant_type: "client_credentials",
     client_id: process.env.CLIENT_ID,
     client_secret: process.env.CLIENT_SECRET,
-    scope: 'read write'
+    scope: "read write",
   });
-  
+
   try {
     const response = await axios.post(
-      'http://localhost:8080/oauth/token',
+      "http://localhost:8080/oauth/token",
       params,
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       }
     );
-    
+
     return response.data;
   } catch (error) {
-    console.error('Token request failed:', error.response?.data);
+    console.error("Token request failed:", error.response?.data);
     throw error;
   }
 }
@@ -207,8 +207,8 @@ async function getClientCredentialsToken() {
 // Usage
 (async () => {
   const tokens = await getClientCredentialsToken();
-  console.log('Access Token:', tokens.access_token);
-  console.log('Expires in:', tokens.expires_in, 'seconds');
+  console.log("Access Token:", tokens.access_token);
+  console.log("Expires in:", tokens.expires_in, "seconds");
 })();
 ```
 
@@ -220,17 +220,17 @@ import os
 
 def get_client_credentials_token():
     url = 'http://localhost:8080/oauth/token'
-    
+
     data = {
         'grant_type': 'client_credentials',
         'client_id': os.environ['CLIENT_ID'],
         'client_secret': os.environ['CLIENT_SECRET'],
         'scope': 'read write'
     }
-    
+
     response = requests.post(url, data=data)
     response.raise_for_status()
-    
+
     return response.json()
 
 # Usage
@@ -267,7 +267,7 @@ func getClientCredentialsToken() (*TokenResponse, error) {
     data.Set("client_id", os.Getenv("CLIENT_ID"))
     data.Set("client_secret", os.Getenv("CLIENT_SECRET"))
     data.Set("scope", "read write")
-    
+
     resp, err := http.Post(
         "http://localhost:8080/oauth/token",
         "application/x-www-form-urlencoded",
@@ -277,16 +277,16 @@ func getClientCredentialsToken() (*TokenResponse, error) {
         return nil, err
     }
     defer resp.Body.Close()
-    
+
     if resp.StatusCode != http.StatusOK {
         return nil, fmt.Errorf("token request failed: %s", resp.Status)
     }
-    
+
     var tokens TokenResponse
     if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
         return nil, err
     }
-    
+
     return &tokens, nil
 }
 
@@ -296,7 +296,7 @@ func main() {
         fmt.Printf("Error: %v\n", err)
         return
     }
-    
+
     fmt.Printf("Access Token: %s\n", tokens.AccessToken)
     fmt.Printf("Expires in: %d seconds\n", tokens.ExpiresIn)
 }
@@ -320,23 +320,23 @@ struct TokenResponse {
 
 async fn get_client_credentials_token() -> Result<TokenResponse, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
-    
+
     let mut params = HashMap::new();
     params.insert("grant_type", "client_credentials");
     params.insert("client_id", &env::var("CLIENT_ID")?);
     params.insert("client_secret", &env::var("CLIENT_SECRET")?);
     params.insert("scope", "read write");
-    
+
     let response = client
         .post("http://localhost:8080/oauth/token")
         .form(&params)
         .send()
         .await?;
-    
+
     if !response.status().is_success() {
         return Err(format!("Token request failed: {}", response.status()).into());
     }
-    
+
     let tokens: TokenResponse = response.json().await?;
     Ok(tokens)
 }
@@ -344,10 +344,10 @@ async fn get_client_credentials_token() -> Result<TokenResponse, Box<dyn std::er
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokens = get_client_credentials_token().await?;
-    
+
     println!("Access Token: {}", tokens.access_token);
     println!("Expires in: {} seconds", tokens.expires_in);
-    
+
     Ok(())
 }
 ```
@@ -368,16 +368,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ```javascript
 async function callProtectedAPI(accessToken) {
-  const response = await fetch('https://api.example.com/api/resource', {
+  const response = await fetch("https://api.example.com/api/resource", {
     headers: {
-      'Authorization': `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
-  
+
   if (!response.ok) {
     throw new Error(`API request failed: ${response.status}`);
   }
-  
+
   return await response.json();
 }
 ```
@@ -389,13 +389,13 @@ def call_protected_api(access_token):
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
-    
+
     response = requests.get(
         'https://api.example.com/api/resource',
         headers=headers
     )
     response.raise_for_status()
-    
+
     return response.json()
 ```
 
@@ -411,23 +411,23 @@ class TokenCache {
     this.token = null;
     this.expiresAt = null;
   }
-  
+
   async getToken() {
     // Check if cached token is still valid
     if (this.token && this.expiresAt > Date.now()) {
       return this.token;
     }
-    
+
     // Request new token
     const response = await getClientCredentialsToken();
-    
+
     // Cache with buffer (expire 5 minutes early)
     this.token = response.access_token;
-    this.expiresAt = Date.now() + ((response.expires_in - 300) * 1000);
-    
+    this.expiresAt = Date.now() + (response.expires_in - 300) * 1000;
+
     return this.token;
   }
-  
+
   invalidate() {
     this.token = null;
     this.expiresAt = null;
@@ -457,15 +457,15 @@ class TokenManager:
         self.token = None
         self.expires_at = None
         self.lock = threading.Lock()
-        
+
     def get_token(self):
         with self.lock:
             # Check if token needs refresh (5 min buffer)
             if not self.token or datetime.now() >= self.expires_at - timedelta(minutes=5):
                 self._refresh_token()
-            
+
             return self.token
-    
+
     def _refresh_token(self):
         response = get_client_credentials_token()
         self.token = response['access_token']
@@ -488,27 +488,26 @@ Handle token expiration gracefully:
 ```javascript
 async function apiCallWithRetry(url, maxRetries = 1) {
   let retries = 0;
-  
+
   while (retries <= maxRetries) {
     try {
       const token = await tokenCache.getToken();
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       if (response.status === 401 && retries < maxRetries) {
         // Token might be expired, invalidate cache and retry
         tokenCache.invalidate();
         retries++;
         continue;
       }
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
-      
+
       return await response.json();
-      
     } catch (error) {
       if (retries >= maxRetries) {
         throw error;
@@ -533,7 +532,7 @@ async def make_parallel_requests(urls, token):
         for url in urls:
             headers = {'Authorization': f'Bearer {token}'}
             tasks.append(session.get(url, headers=headers))
-        
+
         responses = await asyncio.gather(*tasks)
         return [await r.json() for r in responses]
 
@@ -575,18 +574,18 @@ Request only necessary permissions:
 ```javascript
 // ✅ Good: Minimal scopes
 const params = {
-  grant_type: 'client_credentials',
+  grant_type: "client_credentials",
   client_id: CLIENT_ID,
   client_secret: CLIENT_SECRET,
-  scope: 'read:resources'  // Only what's needed
+  scope: "read:resources", // Only what's needed
 };
 
 // ❌ Bad: Excessive scopes
 const params = {
-  grant_type: 'client_credentials',
+  grant_type: "client_credentials",
   client_id: CLIENT_ID,
   client_secret: CLIENT_SECRET,
-  scope: 'read write delete admin'  // Too broad!
+  scope: "read write delete admin", // Too broad!
 };
 ```
 
@@ -596,10 +595,10 @@ Always use HTTPS in production:
 
 ```javascript
 // ✅ Good: HTTPS
-const TOKEN_URL = 'https://oauth2-server.example.com/oauth/token';
+const TOKEN_URL = "https://oauth2-server.example.com/oauth/token";
 
 // ❌ Bad: HTTP (only for local development)
-const TOKEN_URL = 'http://oauth2-server.example.com/oauth/token';
+const TOKEN_URL = "http://oauth2-server.example.com/oauth/token";
 ```
 
 ### 4. Token Storage
@@ -609,20 +608,20 @@ Store tokens securely:
 ```javascript
 // ✅ Good: In-memory or secure storage
 class SecureTokenStorage {
-  #token = null;  // Private field
-  
+  #token = null; // Private field
+
   setToken(token) {
     this.#token = token;
   }
-  
+
   getToken() {
     return this.#token;
   }
 }
 
 // ❌ Bad: Logging tokens
-console.log('Token:', accessToken);  // DON'T DO THIS!
-logger.info('Token received:', { token: accessToken });  // DON'T DO THIS!
+console.log("Token:", accessToken); // DON'T DO THIS!
+logger.info("Token received:", { token: accessToken }); // DON'T DO THIS!
 ```
 
 ### 5. Rotate Credentials
@@ -641,12 +640,12 @@ Regularly rotate client credentials:
 
 ### Common Errors
 
-| Error Code | Description | Resolution |
-|------------|-------------|------------|
-| `invalid_client` | Invalid client_id or client_secret | Verify credentials |
-| `invalid_scope` | Requested scope not allowed | Request valid scopes |
-| `unauthorized_client` | Client not authorized for this grant | Check client grant types |
-| `server_error` | Internal server error | Retry with exponential backoff |
+| Error Code            | Description                          | Resolution                     |
+| --------------------- | ------------------------------------ | ------------------------------ |
+| `invalid_client`      | Invalid client_id or client_secret   | Verify credentials             |
+| `invalid_scope`       | Requested scope not allowed          | Request valid scopes           |
+| `unauthorized_client` | Client not authorized for this grant | Check client grant types       |
+| `server_error`        | Internal server error                | Retry with exponential backoff |
 
 ### Comprehensive Error Handling
 
@@ -655,25 +654,28 @@ async function getTokenWithErrorHandling() {
   try {
     const response = await axios.post(tokenUrl, params);
     return response.data;
-    
   } catch (error) {
     if (error.response) {
       const { error: code, error_description } = error.response.data;
-      
+
       switch (code) {
-        case 'invalid_client':
-          throw new Error('Invalid client credentials. Check CLIENT_ID and CLIENT_SECRET.');
-          
-        case 'invalid_scope':
+        case "invalid_client":
+          throw new Error(
+            "Invalid client credentials. Check CLIENT_ID and CLIENT_SECRET."
+          );
+
+        case "invalid_scope":
           throw new Error(`Invalid scope requested: ${error_description}`);
-          
-        case 'unauthorized_client':
-          throw new Error('Client not authorized for client_credentials grant type.');
-          
-        case 'server_error':
+
+        case "unauthorized_client":
+          throw new Error(
+            "Client not authorized for client_credentials grant type."
+          );
+
+        case "server_error":
           // Retry with exponential backoff
           return await retryWithBackoff(() => getTokenWithErrorHandling());
-          
+
         default:
           throw new Error(`OAuth2 error: ${code} - ${error_description}`);
       }
@@ -690,17 +692,17 @@ async function getTokenWithErrorHandling() {
 
 ```javascript
 // ✅ Good: Log without sensitive data
-logger.info('Requesting client credentials token', {
+logger.info("Requesting client credentials token", {
   client_id: CLIENT_ID,
   scope: requestedScope,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 });
 
 // ❌ Bad: Logging secrets
-logger.info('Token request', {
+logger.info("Token request", {
   client_id: CLIENT_ID,
-  client_secret: CLIENT_SECRET,  // NEVER LOG THIS!
-  response: tokenResponse         // DON'T LOG TOKENS!
+  client_secret: CLIENT_SECRET, // NEVER LOG THIS!
+  response: tokenResponse, // DON'T LOG TOKENS!
 });
 ```
 
@@ -711,13 +713,13 @@ const tokenMetrics = {
   requestCount: 0,
   successCount: 0,
   errorCount: 0,
-  avgResponseTime: 0
+  avgResponseTime: 0,
 };
 
 async function getTokenWithMetrics() {
   const startTime = Date.now();
   tokenMetrics.requestCount++;
-  
+
   try {
     const token = await getClientCredentialsToken();
     tokenMetrics.successCount++;
@@ -727,7 +729,7 @@ async function getTokenWithMetrics() {
     throw error;
   } finally {
     const duration = Date.now() - startTime;
-    tokenMetrics.avgResponseTime = 
+    tokenMetrics.avgResponseTime =
       (tokenMetrics.avgResponseTime + duration) / 2;
   }
 }
@@ -749,7 +751,7 @@ async function getTokenWithMetrics() {
 ## Complete Example: Microservice
 
 ```javascript
-const axios = require('axios');
+const axios = require("axios");
 
 class OAuth2Client {
   constructor(config) {
@@ -757,59 +759,57 @@ class OAuth2Client {
     this.token = null;
     this.expiresAt = null;
   }
-  
+
   async getToken() {
     // Return cached token if still valid
     if (this.token && this.expiresAt > Date.now() + 300000) {
       return this.token;
     }
-    
+
     // Request new token
     const params = new URLSearchParams({
-      grant_type: 'client_credentials',
+      grant_type: "client_credentials",
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
-      scope: this.config.scope
+      scope: this.config.scope,
     });
-    
-    const response = await axios.post(
-      this.config.tokenUrl,
-      params,
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-    
+
+    const response = await axios.post(this.config.tokenUrl, params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+
     this.token = response.data.access_token;
-    this.expiresAt = Date.now() + (response.data.expires_in * 1000);
-    
+    this.expiresAt = Date.now() + response.data.expires_in * 1000;
+
     return this.token;
   }
-  
+
   async makeAuthenticatedRequest(url, options = {}) {
     const token = await this.getToken();
-    
+
     return axios({
       ...options,
       url,
       headers: {
         ...options.headers,
-        'Authorization': `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
   }
 }
 
 // Usage
 const client = new OAuth2Client({
-  tokenUrl: 'http://localhost:8080/oauth/token',
+  tokenUrl: "http://localhost:8080/oauth/token",
   clientId: process.env.CLIENT_ID,
   clientSecret: process.env.CLIENT_SECRET,
-  scope: 'read write'
+  scope: "read write",
 });
 
 // Make authenticated requests
 async function fetchData() {
   const response = await client.makeAuthenticatedRequest(
-    'https://api.example.com/data'
+    "https://api.example.com/data"
   );
   return response.data;
 }
@@ -818,6 +818,6 @@ async function fetchData() {
 ## Next Steps
 
 - [Authorization Code Flow](authorization-code.md) - User-based authentication
-- [Refresh Token Flow](refresh-token.md) - Refreshing access tokens
-- [Password Flow](password.md) - Resource Owner Password Credentials
+- [Refresh Token Flow](refresh-token.md) - Refreshing access tokens (disabled by default)
+- [Password Flow](password.md) - Resource Owner Password Credentials (disabled by default)
 - [API Authentication](../api/authentication.md) - Using tokens with APIs

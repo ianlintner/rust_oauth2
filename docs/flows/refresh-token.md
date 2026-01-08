@@ -2,6 +2,9 @@
 
 The Refresh Token Flow allows clients to obtain new access tokens without requiring user re-authentication. This is essential for long-lived applications that need continuous access to protected resources.
 
+!!! warning "Disabled by Default"
+This server disables the `refresh_token` grant by default (OAuth 2.0 Security BCP). Requests will be rejected with `unsupported_grant_type`.
+
 ## Overview
 
 Refresh tokens are used when:
@@ -19,28 +22,30 @@ Refresh tokens are used when:
 
 ## Flow Diagram
 
+The diagram below shows the flow **when the `refresh_token` grant is enabled**.
+
 ```mermaid
 sequenceDiagram
     autonumber
     participant Client as Client Application
     participant AuthServer as Authorization Server
     participant ResourceServer as Resource Server
-    
+
     Note over Client: Access token expired
-    
+
     Note right of Client: grant_type=refresh_token
     Client->>AuthServer: 1. POST /oauth/token
     Note over Client,AuthServer: Includes refresh_token, client_id, client_secret
-    
+
     AuthServer->>AuthServer: 2. Validate refresh token
     AuthServer->>AuthServer: 3. Validate client credentials
     AuthServer->>AuthServer: 4. Check token not revoked
     AuthServer->>AuthServer: 5. Generate new access token
     AuthServer->>AuthServer: 6. Optionally rotate refresh token
-    
+
     Note right of AuthServer: Returns new tokens
     AuthServer->>Client: 7. Return new access_token and optionally new refresh_token
-    
+
     Client->>ResourceServer: 8. API request with new token
     ResourceServer->>Client: 9. Return protected resource
 ```
@@ -51,16 +56,16 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> InitialAuth: User Login/Authorization
     InitialAuth --> ActiveAccess: Receive Tokens
-    
+
     ActiveAccess --> Expired: Access Token Expires
     Expired --> Refreshing: Refresh Token Request
     Refreshing --> ActiveAccess: New Access Token
-    
+
     ActiveAccess --> Revoked: Manual Revocation
     Refreshing --> Revoked: Refresh Token Invalid
-    
+
     Revoked --> [*]: Session Ended
-    
+
     note right of Refreshing
         Old refresh token
         may be invalidated
@@ -68,6 +73,8 @@ stateDiagram-v2
 ```
 
 ## Implementation
+
+By default, refresh token requests are rejected. The examples below are provided for deployments that explicitly enable refresh tokens.
 
 ### Request New Access Token
 
@@ -87,15 +94,17 @@ scope=read
 
 **Parameters:**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `grant_type` | Yes | Must be `refresh_token` |
-| `refresh_token` | Yes | The refresh token from initial authorization |
-| `client_id` | Yes | The client identifier |
-| `client_secret` | Yes | The client secret (for confidential clients) |
-| `scope` | No | Requested scope (must be subset of original) |
+| Parameter       | Required | Description                                  |
+| --------------- | -------- | -------------------------------------------- |
+| `grant_type`    | Yes      | Must be `refresh_token`                      |
+| `refresh_token` | Yes      | The refresh token from initial authorization |
+| `client_id`     | Yes      | The client identifier                        |
+| `client_secret` | Yes      | The client secret (for confidential clients) |
+| `scope`         | No       | Requested scope (must be subset of original) |
 
 ### Success Response
+
+#### When Enabled
 
 ```json
 {
@@ -109,15 +118,26 @@ scope=read
 
 **Response Fields:**
 
-| Field | Description |
-|-------|-------------|
-| `access_token` | New JWT access token |
-| `token_type` | Always "Bearer" |
-| `expires_in` | Token lifetime in seconds |
+| Field           | Description                                           |
+| --------------- | ----------------------------------------------------- |
+| `access_token`  | New JWT access token                                  |
+| `token_type`    | Always "Bearer"                                       |
+| `expires_in`    | Token lifetime in seconds                             |
 | `refresh_token` | New refresh token (optional, may be same as original) |
-| `scope` | Granted scopes |
+| `scope`         | Granted scopes                                        |
 
 ### Error Response
+
+#### Default (Disabled)
+
+```json
+{
+  "error": "unsupported_grant_type",
+  "error_description": "The grant_type is not supported"
+}
+```
+
+#### When Enabled
 
 ```json
 {
@@ -133,36 +153,36 @@ scope=read
 ```javascript
 async function refreshAccessToken(refreshToken) {
   const params = new URLSearchParams({
-    grant_type: 'refresh_token',
+    grant_type: "refresh_token",
     refresh_token: refreshToken,
     client_id: process.env.CLIENT_ID,
-    client_secret: process.env.CLIENT_SECRET
+    client_secret: process.env.CLIENT_SECRET,
   });
-  
+
   try {
-    const response = await fetch('http://localhost:8080/oauth/token', {
-      method: 'POST',
+    const response = await fetch("http://localhost:8080/oauth/token", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: params
+      body: params,
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(`Token refresh failed: ${error.error_description}`);
     }
-    
+
     return await response.json();
   } catch (error) {
-    console.error('Failed to refresh token:', error);
+    console.error("Failed to refresh token:", error);
     throw error;
   }
 }
 
 // Usage
 const tokens = await refreshAccessToken(currentRefreshToken);
-console.log('New access token:', tokens.access_token);
+console.log("New access token:", tokens.access_token);
 
 // Update stored tokens
 if (tokens.refresh_token) {
@@ -179,24 +199,24 @@ import os
 
 def refresh_access_token(refresh_token):
     url = 'http://localhost:8080/oauth/token'
-    
+
     data = {
         'grant_type': 'refresh_token',
         'refresh_token': refresh_token,
         'client_id': os.environ['CLIENT_ID'],
         'client_secret': os.environ['CLIENT_SECRET']
     }
-    
+
     response = requests.post(url, data=data)
     response.raise_for_status()
-    
+
     tokens = response.json()
-    
+
     # Update refresh token if new one issued
     if 'refresh_token' in tokens:
         # Store new refresh token
         pass
-    
+
     return tokens
 
 # Usage
@@ -228,38 +248,38 @@ class TokenManager {
     this.refreshToken = null;
     this.expiresAt = null;
   }
-  
+
   async getAccessToken() {
     // Refresh if token expires in less than 5 minutes
     const bufferTime = 5 * 60 * 1000; // 5 minutes
-    
-    if (!this.accessToken || Date.now() >= (this.expiresAt - bufferTime)) {
+
+    if (!this.accessToken || Date.now() >= this.expiresAt - bufferTime) {
       await this.refreshTokens();
     }
-    
+
     return this.accessToken;
   }
-  
+
   async refreshTokens() {
     if (!this.refreshToken) {
-      throw new Error('No refresh token available');
+      throw new Error("No refresh token available");
     }
-    
+
     const tokens = await refreshAccessToken(this.refreshToken);
-    
+
     this.accessToken = tokens.access_token;
-    this.expiresAt = Date.now() + (tokens.expires_in * 1000);
-    
+    this.expiresAt = Date.now() + tokens.expires_in * 1000;
+
     // Update refresh token if rotated
     if (tokens.refresh_token) {
       this.refreshToken = tokens.refresh_token;
     }
   }
-  
+
   setTokens(accessToken, refreshToken, expiresIn) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
-    this.expiresAt = Date.now() + (expiresIn * 1000);
+    this.expiresAt = Date.now() + expiresIn * 1000;
   }
 }
 
@@ -278,30 +298,30 @@ Refresh tokens when API returns 401:
 ```javascript
 async function apiCallWithAutoRefresh(url, options = {}) {
   let token = await tokenManager.getAccessToken();
-  
+
   let response = await fetch(url, {
     ...options,
     headers: {
       ...options.headers,
-      'Authorization': `Bearer ${token}`
-    }
+      Authorization: `Bearer ${token}`,
+    },
   });
-  
+
   // If 401, try refreshing token once
   if (response.status === 401) {
     await tokenManager.refreshTokens();
     token = await tokenManager.getAccessToken();
-    
+
     // Retry request with new token
     response = await fetch(url, {
       ...options,
       headers: {
         ...options.headers,
-        'Authorization': `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
   }
-  
+
   return response;
 }
 ```
@@ -316,25 +336,26 @@ class AutoRefreshTokenManager {
     this.tokenManager = new TokenManager();
     this.refreshTimer = null;
   }
-  
+
   startAutoRefresh() {
     // Refresh 5 minutes before expiration
-    const refreshTime = (this.tokenManager.expiresAt - Date.now()) - (5 * 60 * 1000);
-    
+    const refreshTime =
+      this.tokenManager.expiresAt - Date.now() - 5 * 60 * 1000;
+
     if (refreshTime > 0) {
       this.refreshTimer = setTimeout(async () => {
         try {
           await this.tokenManager.refreshTokens();
           this.startAutoRefresh(); // Schedule next refresh
         } catch (error) {
-          console.error('Auto-refresh failed:', error);
+          console.error("Auto-refresh failed:", error);
           // Emit event for re-authentication
-          this.emit('authenticationRequired');
+          this.emit("authenticationRequired");
         }
       }, refreshTime);
     }
   }
-  
+
   stopAutoRefresh() {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
@@ -354,19 +375,19 @@ Some OAuth2 servers implement refresh token rotation for enhanced security.
 sequenceDiagram
     participant Client
     participant Server
-    
+
     Note over Client: Has refresh_token_1
-    
+
     Client->>Server: Refresh with token_1
     Server->>Server: Invalidate token_1
     Server->>Server: Generate new tokens
     Server->>Client: Return access_token + refresh_token_2
-    
+
     Note over Client: Store refresh_token_2
     Note over Server: token_1 now invalid
-    
+
     Note over Client,Server: Later...
-    
+
     Client->>Server: Refresh with token_2
     Server->>Server: Invalidate token_2
     Server->>Server: Generate new tokens
@@ -378,16 +399,16 @@ sequenceDiagram
 ```javascript
 async function handleTokenRefresh(refreshToken) {
   const newTokens = await refreshAccessToken(refreshToken);
-  
+
   // Important: Store the new refresh token immediately
   if (newTokens.refresh_token) {
     await secureStorage.setRefreshToken(newTokens.refresh_token);
-    console.log('Refresh token rotated - new token stored');
+    console.log("Refresh token rotated - new token stored");
   }
-  
+
   // Store access token
   await secureStorage.setAccessToken(newTokens.access_token);
-  
+
   return newTokens;
 }
 ```
@@ -401,21 +422,23 @@ Store refresh tokens securely:
 ```javascript
 // ✅ Good: Secure storage
 // Backend (Node.js)
-const session = require('express-session');
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  cookie: {
-    secure: true,      // HTTPS only
-    httpOnly: true,    // Not accessible via JavaScript
-    sameSite: 'strict'
-  }
-}));
+const session = require("express-session");
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    cookie: {
+      secure: true, // HTTPS only
+      httpOnly: true, // Not accessible via JavaScript
+      sameSite: "strict",
+    },
+  })
+);
 
 // Store in session
 req.session.refreshToken = tokens.refresh_token;
 
 // ❌ Bad: Insecure storage
-localStorage.setItem('refresh_token', token);  // DON'T DO THIS!
+localStorage.setItem("refresh_token", token); // DON'T DO THIS!
 ```
 
 ### 2. Refresh Token Expiration
@@ -425,9 +448,9 @@ Set appropriate expiration times:
 ```javascript
 // Configuration
 const TOKEN_CONFIG = {
-  accessTokenExpiration: 3600,        // 1 hour
-  refreshTokenExpiration: 2592000,    // 30 days
-  absoluteRefreshExpiration: 7776000  // 90 days (absolute maximum)
+  accessTokenExpiration: 3600, // 1 hour
+  refreshTokenExpiration: 2592000, // 30 days
+  absoluteRefreshExpiration: 7776000, // 90 days (absolute maximum)
 };
 ```
 
@@ -440,14 +463,14 @@ async function logout() {
   try {
     // Revoke refresh token
     await revokeToken(refreshToken);
-    
+
     // Clear local storage
     tokenManager.clear();
-    
+
     // Redirect to login
-    window.location.href = '/login';
+    window.location.href = "/login";
   } catch (error) {
-    console.error('Logout failed:', error);
+    console.error("Logout failed:", error);
   }
 }
 
@@ -455,13 +478,13 @@ async function revokeToken(token) {
   const params = new URLSearchParams({
     token: token,
     client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET
+    client_secret: CLIENT_SECRET,
   });
-  
-  await fetch('http://localhost:8080/oauth/revoke', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params
+
+  await fetch("http://localhost:8080/oauth/revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
   });
 }
 ```
@@ -474,21 +497,21 @@ Implement detection mechanisms:
 // Server-side: Track token usage
 async function validateRefreshToken(refreshToken, clientInfo) {
   const tokenData = await db.getRefreshToken(refreshToken);
-  
+
   // Check if token already used (possible theft)
   if (tokenData.used && tokenData.rotated) {
     // Token reuse detected - revoke entire token family
     await revokeTokenFamily(tokenData.family_id);
-    throw new Error('Token reuse detected - possible theft');
+    throw new Error("Token reuse detected - possible theft");
   }
-  
+
   // Check client fingerprint
   if (tokenData.client_fingerprint !== clientInfo.fingerprint) {
     // Different client using token
     await revokeTokenFamily(tokenData.family_id);
-    throw new Error('Token used by different client');
+    throw new Error("Token used by different client");
   }
-  
+
   return tokenData;
 }
 ```
@@ -497,12 +520,12 @@ async function validateRefreshToken(refreshToken, clientInfo) {
 
 ### Common Errors
 
-| Error Code | Description | Action |
-|------------|-------------|--------|
-| `invalid_grant` | Refresh token invalid/expired | Re-authenticate user |
-| `invalid_client` | Invalid client credentials | Check client_id/secret |
-| `unauthorized_client` | Client not authorized | Check client configuration |
-| `invalid_scope` | Requested scope not allowed | Request valid scopes |
+| Error Code            | Description                   | Action                     |
+| --------------------- | ----------------------------- | -------------------------- |
+| `invalid_grant`       | Refresh token invalid/expired | Re-authenticate user       |
+| `invalid_client`      | Invalid client credentials    | Check client_id/secret     |
+| `unauthorized_client` | Client not authorized         | Check client configuration |
+| `invalid_scope`       | Requested scope not allowed   | Request valid scopes       |
 
 ### Comprehensive Error Handling
 
@@ -513,19 +536,19 @@ async function refreshWithErrorHandling(refreshToken) {
   } catch (error) {
     if (error.response?.data?.error) {
       const { error: code, error_description } = error.response.data;
-      
+
       switch (code) {
-        case 'invalid_grant':
+        case "invalid_grant":
           // Refresh token expired or revoked - need re-authentication
           await clearTokens();
           redirectToLogin();
-          throw new Error('Session expired - please log in again');
-          
-        case 'invalid_client':
+          throw new Error("Session expired - please log in again");
+
+        case "invalid_client":
           // Configuration error
-          console.error('Client configuration error:', error_description);
-          throw new Error('Authentication configuration error');
-          
+          console.error("Client configuration error:", error_description);
+          throw new Error("Authentication configuration error");
+
         default:
           throw new Error(`Token refresh failed: ${error_description}`);
       }
@@ -551,24 +574,24 @@ async function refreshWithErrorHandling(refreshToken) {
 ## Complete Example: React App
 
 ```javascript
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from "react";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [tokens, setTokens] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     // Load tokens from secure storage on mount
     loadTokens();
-    
+
     // Setup auto-refresh
     const interval = setupAutoRefresh();
-    
+
     return () => clearInterval(interval);
   }, []);
-  
+
   async function loadTokens() {
     try {
       const stored = await secureStorage.getTokens();
@@ -579,26 +602,26 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }
   }
-  
+
   function setupAutoRefresh() {
     return setInterval(async () => {
       if (tokens?.refresh_token) {
         try {
           await refreshTokens();
         } catch (error) {
-          console.error('Auto-refresh failed:', error);
+          console.error("Auto-refresh failed:", error);
           logout();
         }
       }
     }, 10 * 60 * 1000); // Check every 10 minutes
   }
-  
+
   async function refreshTokens() {
     const newTokens = await refreshAccessToken(tokens.refresh_token);
     setTokens(newTokens);
     await secureStorage.setTokens(newTokens);
   }
-  
+
   async function logout() {
     if (tokens?.refresh_token) {
       await revokeToken(tokens.refresh_token);
@@ -606,14 +629,14 @@ export function AuthProvider({ children }) {
     setTokens(null);
     await secureStorage.clearTokens();
   }
-  
+
   const value = {
     tokens,
     loading,
     refreshTokens,
-    logout
+    logout,
   };
-  
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
@@ -629,13 +652,13 @@ const metrics = {
   refreshAttempts: 0,
   refreshSuccesses: 0,
   refreshFailures: 0,
-  avgRefreshTime: 0
+  avgRefreshTime: 0,
 };
 
 async function refreshWithMetrics(refreshToken) {
   const start = Date.now();
   metrics.refreshAttempts++;
-  
+
   try {
     const tokens = await refreshAccessToken(refreshToken);
     metrics.refreshSuccesses++;
@@ -645,8 +668,7 @@ async function refreshWithMetrics(refreshToken) {
     throw error;
   } finally {
     const duration = Date.now() - start;
-    metrics.avgRefreshTime = 
-      (metrics.avgRefreshTime + duration) / 2;
+    metrics.avgRefreshTime = (metrics.avgRefreshTime + duration) / 2;
   }
 }
 ```

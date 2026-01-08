@@ -1,6 +1,8 @@
 use actix::Addr;
-use actix_web::{web, HttpResponse, Result};
+use actix_web::{web, HttpRequest, HttpResponse, Result};
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
+use url::{form_urlencoded, Url};
 
 use oauth2_observability::Metrics;
 
@@ -45,6 +47,56 @@ fn no_store_headers(mut resp: HttpResponse) -> HttpResponse {
     resp
 }
 
+fn auth_response_security_headers(mut resp: HttpResponse) -> HttpResponse {
+    // These headers are aligned with OAuth 2.0 Security BCP and help with OAuch's
+    // clickjacking/referrer leakage checks.
+    resp.headers_mut().insert(
+        actix_web::http::header::REFERRER_POLICY,
+        "no-referrer".parse().unwrap(),
+    );
+    resp.headers_mut().insert(
+        actix_web::http::header::X_FRAME_OPTIONS,
+        "DENY".parse().unwrap(),
+    );
+    resp.headers_mut().insert(
+        actix_web::http::header::CONTENT_SECURITY_POLICY,
+        "frame-ancestors 'none'".parse().unwrap(),
+    );
+    resp.headers_mut().insert(
+        actix_web::http::header::X_CONTENT_TYPE_OPTIONS,
+        "nosniff".parse().unwrap(),
+    );
+    resp
+}
+
+fn ensure_no_duplicate_query_params(req: &HttpRequest) -> Result<(), OAuth2Error> {
+    let mut seen: HashSet<String> = HashSet::new();
+    for (k, _v) in form_urlencoded::parse(req.query_string().as_bytes()) {
+        let key = k.into_owned();
+        if !seen.insert(key) {
+            return Err(OAuth2Error::invalid_request(
+                "Duplicate query parameters are not allowed",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_form_no_dupes(body: &web::Bytes) -> Result<HashMap<String, String>, OAuth2Error> {
+    let mut map: HashMap<String, String> = HashMap::new();
+    for (k, v) in form_urlencoded::parse(body) {
+        let key = k.into_owned();
+        let val = v.into_owned();
+        if map.contains_key(&key) {
+            return Err(OAuth2Error::invalid_request(
+                "Duplicate form parameters are not allowed",
+            ));
+        }
+        map.insert(key, val);
+    }
+    Ok(map)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeQuery {
     #[allow(dead_code)] // OAuth2 spec field, will be validated in future
@@ -60,11 +112,15 @@ pub struct AuthorizeQuery {
 /// OAuth2 authorize endpoint
 /// Initiates the authorization code flow
 pub async fn authorize(
+    req: HttpRequest,
     query: web::Query<AuthorizeQuery>,
     auth_actor: web::Data<Addr<AuthActor>>,
     client_actor: web::Data<Addr<ClientActor>>,
     metrics: web::Data<Metrics>,
 ) -> Result<HttpResponse, OAuth2Error> {
+    // OAuch: reject duplicate parameters (prevents ambiguous parsing).
+    ensure_no_duplicate_query_params(&req)?;
+
     // Only Authorization Code flow is supported.
     if query.response_type != "code" {
         return Err(OAuth2Error::invalid_request("Unsupported response_type"));
@@ -87,6 +143,26 @@ pub async fn authorize(
 
     if !client.validate_redirect_uri(&query.redirect_uri) {
         return Err(OAuth2Error::invalid_request("Invalid redirect_uri"));
+    }
+
+    // Require PKCE (S256 only). This follows OAuth 2.0 Security BCP guidance.
+    let code_challenge = query
+        .code_challenge
+        .as_deref()
+        .ok_or_else(|| OAuth2Error::invalid_request("Missing code_challenge"))?;
+    let code_challenge_method = query
+        .code_challenge_method
+        .as_deref()
+        .ok_or_else(|| OAuth2Error::invalid_request("Missing code_challenge_method"))?;
+    if code_challenge_method != "S256" {
+        return Err(OAuth2Error::invalid_request(
+            "Only S256 code_challenge_method is supported",
+        ));
+    }
+    if code_challenge.trim().is_empty() {
+        return Err(OAuth2Error::invalid_request(
+            "code_challenge must not be empty",
+        ));
     }
 
     // In a real implementation, this would show a consent page
@@ -113,15 +189,27 @@ pub async fn authorize(
 
     metrics.oauth_authorization_codes_issued.inc();
 
-    // Redirect back to client with code
-    let mut redirect_url = format!("{}?code={}", query.redirect_uri, auth_code.code);
-    if let Some(state) = &query.state {
-        redirect_url.push_str(&format!("&state={}", state));
+    // Redirect back to client with code (and optional state) while safely preserving existing query.
+    let mut url = Url::parse(&query.redirect_uri)
+        .map_err(|_| OAuth2Error::invalid_request("Invalid redirect_uri"))?;
+    if url.fragment().is_some() {
+        return Err(OAuth2Error::invalid_request(
+            "redirect_uri must not contain a fragment",
+        ));
+    }
+    {
+        let mut qp = url.query_pairs_mut();
+        qp.append_pair("code", &auth_code.code);
+        if let Some(state) = &query.state {
+            qp.append_pair("state", state);
+        }
     }
 
-    Ok(HttpResponse::Found()
-        .append_header(("Location", redirect_url))
-        .finish())
+    Ok(auth_response_security_headers(no_store_headers(
+        HttpResponse::Found()
+            .append_header(("Location", url.to_string()))
+            .finish(),
+    )))
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,7 +221,9 @@ pub struct TokenRequest {
     client_secret: Option<String>,
     #[allow(dead_code)] // OAuth2 refresh token grant, planned for future
     refresh_token: Option<String>,
+    #[allow(dead_code)] // OAuth2 password grant, intentionally disabled by default
     username: Option<String>,
+    #[allow(dead_code)] // OAuth2 password grant, intentionally disabled by default
     password: Option<String>,
     scope: Option<String>,
     code_verifier: Option<String>,
@@ -142,32 +232,48 @@ pub struct TokenRequest {
 /// OAuth2 token endpoint
 /// Exchanges authorization code for access token
 pub async fn token(
-    form: web::Form<TokenRequest>,
+    req: HttpRequest,
+    body: web::Bytes,
     token_actor: web::Data<Addr<TokenActor>>,
     client_actor: web::Data<Addr<ClientActor>>,
     auth_actor: web::Data<Addr<AuthActor>>,
     metrics: web::Data<Metrics>,
 ) -> Result<HttpResponse, OAuth2Error> {
+    // OAuch: reject duplicate parameters (prevents parser differentials / smuggling).
+    ensure_no_duplicate_query_params(&req)?;
+    let form_map = parse_form_no_dupes(&body)?;
+
+    let form = TokenRequest {
+        grant_type: form_map
+            .get("grant_type")
+            .cloned()
+            .ok_or_else(|| OAuth2Error::invalid_request("Missing grant_type"))?,
+        code: form_map.get("code").cloned(),
+        redirect_uri: form_map.get("redirect_uri").cloned(),
+        client_id: form_map
+            .get("client_id")
+            .cloned()
+            .ok_or_else(|| OAuth2Error::invalid_request("Missing client_id"))?,
+        client_secret: form_map.get("client_secret").cloned(),
+        refresh_token: form_map.get("refresh_token").cloned(),
+        username: form_map.get("username").cloned(),
+        password: form_map.get("password").cloned(),
+        scope: form_map.get("scope").cloned(),
+        code_verifier: form_map.get("code_verifier").cloned(),
+    };
+
     match form.grant_type.as_str() {
         "authorization_code" => {
-            handle_authorization_code_grant(
-                form.into_inner(),
-                token_actor,
-                client_actor,
-                auth_actor,
-                metrics,
-            )
-            .await
-        }
-        "client_credentials" => {
-            handle_client_credentials_grant(form.into_inner(), token_actor, client_actor, metrics)
+            handle_authorization_code_grant(form, token_actor, client_actor, auth_actor, metrics)
                 .await
         }
-        "password" => {
-            handle_password_grant(form.into_inner(), token_actor, client_actor, metrics).await
+        "client_credentials" => {
+            handle_client_credentials_grant(form, token_actor, client_actor, metrics).await
         }
-        "refresh_token" => {
-            handle_refresh_token_grant(form.into_inner(), token_actor, metrics).await
+        // Password and refresh_token grants are intentionally disabled by default
+        // (OAuth 2.0 Security BCP).
+        "password" | "refresh_token" => {
+            Err(OAuth2Error::unsupported_grant_type("Grant type disabled"))
         }
         _ => Err(OAuth2Error::unsupported_grant_type(&format!(
             "Grant type '{}' not supported",
@@ -186,16 +292,19 @@ async fn handle_authorization_code_grant(
     let code = req
         .code
         .ok_or_else(|| OAuth2Error::invalid_request("Missing code"))?;
-    let redirect_uri = req
-        .redirect_uri
-        .ok_or_else(|| OAuth2Error::invalid_request("Missing redirect_uri"))?;
+
+    if matches!(req.redirect_uri.as_deref(), Some("")) {
+        return Err(OAuth2Error::invalid_request(
+            "redirect_uri must not be empty",
+        ));
+    }
 
     // Validate authorization code
     let auth_code = auth_actor
         .send(ValidateAuthorizationCode {
             code: code.clone(),
             client_id: req.client_id.clone(),
-            redirect_uri,
+            redirect_uri: req.redirect_uri,
             code_verifier: req.code_verifier,
             span: tracing::Span::current(),
         })
@@ -233,10 +342,8 @@ async fn handle_authorization_code_grant(
             }
         }
         None => {
-            // Allow public clients only when PKCE was used.
-            if auth_code.code_challenge.is_none() {
-                return Err(OAuth2Error::invalid_client("Missing client_secret"));
-            }
+            // Require client authentication for the token endpoint.
+            return Err(OAuth2Error::invalid_client("Missing client_secret"));
         }
     }
 
@@ -256,7 +363,7 @@ async fn handle_authorization_code_grant(
             user_id: Some(auth_code.user_id),
             client_id: auth_code.client_id,
             scope: auth_code.scope,
-            include_refresh: true,
+            include_refresh: false,
             span: tracing::Span::current(),
         })
         .await
@@ -326,83 +433,5 @@ async fn handle_client_credentials_grant(
 
     Ok(no_store_headers(
         HttpResponse::Ok().json(TokenResponse::from(token)),
-    ))
-}
-
-async fn handle_password_grant(
-    req: TokenRequest,
-    token_actor: web::Data<Addr<TokenActor>>,
-    client_actor: web::Data<Addr<ClientActor>>,
-    metrics: web::Data<Metrics>,
-) -> Result<HttpResponse, OAuth2Error> {
-    // Validate client exists + grant permissions.
-    let client = client_actor
-        .send(GetClient {
-            client_id: req.client_id.clone(),
-            span: tracing::Span::current(),
-        })
-        .await
-        .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
-
-    if !client.supports_grant_type("password") {
-        return Err(OAuth2Error::unauthorized_client(
-            "Client is not allowed to use password",
-        ));
-    }
-
-    // Validate client credentials (required for this grant).
-    let client_secret = req
-        .client_secret
-        .ok_or_else(|| OAuth2Error::invalid_client("Missing client_secret"))?;
-    let ok = client_actor
-        .send(ValidateClient {
-            client_id: req.client_id.clone(),
-            client_secret,
-            span: tracing::Span::current(),
-        })
-        .await
-        .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
-    if !ok {
-        return Err(OAuth2Error::invalid_client("Invalid client_secret"));
-    }
-
-    let username = req
-        .username
-        .ok_or_else(|| OAuth2Error::invalid_request("Missing username"))?;
-    let _password = req
-        .password
-        .ok_or_else(|| OAuth2Error::invalid_request("Missing password"))?;
-
-    // In real implementation, validate username/password
-    let scope = req.scope.unwrap_or_else(|| "read".to_string());
-
-    validate_scope_subset(&scope, &client.scope)?;
-
-    let token = token_actor
-        .send(CreateToken {
-            user_id: Some(username),
-            client_id: req.client_id,
-            scope,
-            include_refresh: true,
-            span: tracing::Span::current(),
-        })
-        .await
-        .map_err(|e| OAuth2Error::new("server_error", Some(&e.to_string())))??;
-
-    metrics.oauth_token_issued_total.inc();
-
-    Ok(no_store_headers(
-        HttpResponse::Ok().json(TokenResponse::from(token)),
-    ))
-}
-
-async fn handle_refresh_token_grant(
-    _req: TokenRequest,
-    _token_actor: web::Data<Addr<TokenActor>>,
-    _metrics: web::Data<Metrics>,
-) -> Result<HttpResponse, OAuth2Error> {
-    // Simplified refresh token handling
-    Err(OAuth2Error::unsupported_grant_type(
-        "Refresh token grant not yet implemented",
     ))
 }

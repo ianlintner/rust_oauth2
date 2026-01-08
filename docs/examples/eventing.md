@@ -15,7 +15,7 @@ cargo run
 ```
 
 !!! note
-  Console and in-memory backends are available in the default build.
+Console and in-memory backends are available in the default build.
 
 ## Example 2: Production with Selective Events
 
@@ -58,6 +58,7 @@ cargo run --release
 To see events in action, you can use the provided scripts:
 
 ### 1. Start the server with console logging:
+
 ```bash
 export OAUTH2_EVENTS_ENABLED=true
 export OAUTH2_EVENTS_BACKEND=console
@@ -66,13 +67,14 @@ cargo run
 ```
 
 ### 2. Register a client:
+
 ```bash
 curl -X POST http://localhost:8080/clients/register \
   -H "Content-Type: application/json" \
   -d '{
     "client_name": "Test Application",
     "redirect_uris": ["http://localhost:3000/callback"],
-    "grant_types": ["authorization_code", "refresh_token"],
+    "grant_types": ["authorization_code"],
     "scope": "read write"
   }'
 ```
@@ -80,19 +82,21 @@ curl -X POST http://localhost:8080/clients/register \
 You should see a `client_registered` event logged to the console.
 
 ### 3. Get an authorization code:
+
 ```bash
 # Note: Replace CLIENT_ID with the client_id from step 2
-curl "http://localhost:8080/oauth/authorize?response_type=code&client_id=CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read"
+curl "http://localhost:8080/oauth/authorize?response_type=code&client_id=CLIENT_ID&redirect_uri=http://localhost:3000/callback&scope=read&state=STATE&code_challenge=CODE_CHALLENGE&code_challenge_method=S256"
 ```
 
 You should see an `authorization_code_created` event.
 
 ### 4. Exchange code for token:
+
 ```bash
-# Note: Replace CLIENT_ID, CLIENT_SECRET, and CODE with actual values
+# Note: Replace CLIENT_ID, CLIENT_SECRET, CODE, and CODE_VERIFIER with actual values
 curl -X POST http://localhost:8080/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=authorization_code&code=CODE&redirect_uri=http://localhost:3000/callback&client_id=CLIENT_ID&client_secret=CLIENT_SECRET"
+  -d "grant_type=authorization_code&code=CODE&client_id=CLIENT_ID&client_secret=CLIENT_SECRET&code_verifier=CODE_VERIFIER"
 ```
 
 You should see `authorization_code_validated` and `token_created` events.
@@ -137,11 +141,11 @@ spec:
   template:
     spec:
       containers:
-      - name: oauth2-server
-        image: rust_oauth2_server:latest
-        envFrom:
-        - configMapRef:
-            name: oauth2-config
+        - name: oauth2-server
+          image: rust_oauth2_server:latest
+          envFrom:
+            - configMapRef:
+                name: oauth2-config
 ```
 
 ## Event Output Example
